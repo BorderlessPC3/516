@@ -1,0 +1,153 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helpers
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.isActive == true;
+    }
+
+    function isSuperAdmin() {
+      return isAdmin() &&
+        get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == 'SUPER_ADMIN';
+    }
+
+    function adminRole() {
+      return get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role;
+    }
+
+    function hasAdminRole(roles) {
+      return isAdmin() && adminRole() in roles;
+    }
+
+    // Users - mobile app users
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isSuperAdmin();
+    }
+
+    // Admins - panel users
+    match /admins/{adminId} {
+      allow read: if isAdmin();
+      allow create, update: if hasAdminRole(['SUPER_ADMIN', 'ADMIN']);
+      allow delete: if isSuperAdmin();
+    }
+
+    // Campaigns - read by authenticated users, write by admins
+    match /campaigns/{campaignId} {
+      allow read: if isAuthenticated();
+      allow create, update: if hasAdminRole(['SUPER_ADMIN', 'ADMIN']);
+      allow delete: if hasAdminRole(['SUPER_ADMIN', 'ADMIN']);
+    }
+
+    // Campaign Videos
+    match /campaignVideos/{videoId} {
+      allow read: if isAuthenticated();
+      allow write: if hasAdminRole(['SUPER_ADMIN', 'ADMIN']);
+    }
+
+    // Campaign Images
+    match /campaignImages/{imageId} {
+      allow read: if isAuthenticated();
+      allow write: if hasAdminRole(['SUPER_ADMIN', 'ADMIN']);
+    }
+
+    // Coupons
+    match /coupons/{couponId} {
+      allow read: if isAuthenticated() &&
+        (resource.data.userId == request.auth.uid || isAdmin());
+      allow create, update: if hasAdminRole(['SUPER_ADMIN', 'ADMIN']);
+      allow delete: if hasAdminRole(['SUPER_ADMIN', 'ADMIN']);
+    }
+
+    // Draws
+    match /draws/{drawId} {
+      allow read: if isAuthenticated();
+      allow write: if hasAdminRole(['SUPER_ADMIN', 'ADMIN']);
+    }
+
+    // Prizes
+    match /prizes/{prizeId} {
+      allow read: if isAuthenticated();
+      allow write: if hasAdminRole(['SUPER_ADMIN', 'ADMIN']);
+    }
+
+    // Coin wallets
+    match /coins/{walletId} {
+      allow read: if isAuthenticated() &&
+        (resource.data.userId == request.auth.uid || isAdmin());
+      allow write: if false; // Only Cloud Functions
+    }
+
+    // Coin transactions
+    match /coinTransactions/{transactionId} {
+      allow read: if isAuthenticated() &&
+        (resource.data.userId == request.auth.uid || isAdmin());
+      allow write: if false; // Only Cloud Functions
+    }
+
+    // Notifications
+    match /notifications/{notificationId} {
+      allow read: if isAdmin();
+      allow write: if hasAdminRole(['SUPER_ADMIN', 'ADMIN', 'OPERADOR']);
+    }
+
+    // Video progress
+    match /videoProgress/{progressId} {
+      allow read: if isAuthenticated() &&
+        (resource.data.userId == request.auth.uid || isAdmin());
+      allow create, update: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid;
+      allow delete: if isAdmin();
+    }
+
+    // Video views
+    match /videoViews/{viewId} {
+      allow read: if isAuthenticated() &&
+        (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // Social actions
+    match /socialActions/{actionId} {
+      allow read: if isAuthenticated() &&
+        (resource.data.userId == request.auth.uid || isAdmin());
+      allow create, update: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid;
+      allow delete: if isAdmin();
+    }
+
+    // Cities - public read
+    match /cities/{cityId} {
+      allow read: if isAuthenticated();
+      allow write: if hasAdminRole(['SUPER_ADMIN', 'ADMIN']);
+    }
+
+    // Settings
+    match /settings/{settingId} {
+      allow read: if isAuthenticated();
+      allow write: if hasAdminRole(['SUPER_ADMIN', 'ADMIN']);
+    }
+
+    // Audit logs - admin read only, write via functions
+    match /auditLogs/{logId} {
+      allow read: if hasAdminRole(['SUPER_ADMIN', 'ADMIN']);
+      allow write: if false;
+    }
+  }
+}

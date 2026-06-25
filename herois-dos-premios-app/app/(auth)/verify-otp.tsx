@@ -1,0 +1,80 @@
+import { FIRESTORE_COLLECTIONS } from '@herois/shared';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { doc, getDoc } from 'firebase/firestore';
+import { useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, Alert } from 'react-native';
+
+import { authService } from '@/services/firebase/auth.service';
+import { firestore } from '@/services/firebase/firebase-client';
+
+export default function VerifyOtpScreen() {
+  const router = useRouter();
+  const params = useLocalSearchParams<{
+    phone: string;
+    register?: string;
+    name?: string;
+    birthDate?: string;
+    cityId?: string;
+  }>();
+  const [code, setCode] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleVerify = async () => {
+    if (code.length !== 6) {
+      Alert.alert('Erro', 'Digite o código de 6 dígitos');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { uid } = await authService.verifyOtp(params.phone!, code);
+
+      if (params.register === 'true' && params.name && params.cityId) {
+        const citySnap = await getDoc(doc(firestore, FIRESTORE_COLLECTIONS.CITIES, params.cityId));
+        const city = citySnap.data();
+        await authService.createUserProfile(uid, {
+          name: params.name,
+          phone: params.phone!,
+          birthDate: params.birthDate || '',
+          cityId: params.cityId,
+          cityName: city?.name || '',
+          state: city?.state || '',
+        });
+        router.replace('/(auth)/permissions');
+      } else {
+        router.replace('/(app)/(tabs)/home');
+      }
+    } catch {
+      Alert.alert('Erro', 'Código inválido. Tente novamente.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <View className="flex-1 justify-center px-6 bg-secondary">
+      <Text className="text-3xl font-bold text-white mb-2">Verificação</Text>
+      <Text className="text-gray-400 mb-8">Digite o código enviado para {params.phone}</Text>
+
+      <TextInput
+        className="bg-secondary-light text-white px-4 py-3 rounded-lg text-center text-2xl tracking-widest border border-gray-700 mb-6"
+        placeholder="000000"
+        placeholderTextColor="#666"
+        keyboardType="number-pad"
+        maxLength={6}
+        value={code}
+        onChangeText={setCode}
+      />
+
+      <TouchableOpacity
+        className="bg-primary py-4 rounded-lg"
+        onPress={handleVerify}
+        disabled={loading}
+      >
+        <Text className="text-white text-center font-bold text-lg">
+          {loading ? 'Verificando...' : 'Confirmar'}
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
