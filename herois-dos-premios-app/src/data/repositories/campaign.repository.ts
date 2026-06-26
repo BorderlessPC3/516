@@ -3,7 +3,7 @@ import type { Campaign, PaginatedResult } from '@herois/shared';
 import type { ICampaignRepository } from '@herois/shared';
 import { collection, doc, getDoc, getDocs, query, where, orderBy, limit } from 'firebase/firestore';
 
-import { firestore } from './firebase-client';
+import { firestore } from '@/services/firebase/firebase-client';
 
 class CampaignRepository implements ICampaignRepository {
   async findById(id: string): Promise<Campaign | null> {

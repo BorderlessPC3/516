@@ -72,13 +72,30 @@ export const campaignSchema = z.object({
 
 export type CampaignInput = z.infer<typeof campaignSchema>;
 
-/** Cupom CRUD */
-export const couponSchema = z.object({
-  code: z.string().min(4).max(20).toUpperCase(),
+/** Cupom CRUD (painel) */
+export const couponTemplateSchema = z.object({
+  name: z.string().min(2).max(200),
   campaignId: z.string().min(1),
-  userId: z.string().min(1),
+  prizeId: z.string().optional(),
+  quantity: z.number().int().min(1).default(1),
   validFrom: z.string().datetime({ offset: true }),
   validUntil: z.string().datetime({ offset: true }),
+  rules: z.string().min(5).max(5000),
+  isActive: z.boolean().default(true),
+});
+
+export type CouponTemplateInput = z.infer<typeof couponTemplateSchema>;
+
+/** Cupom individual */
+export const couponSchema = z.object({
+  code: z.string().min(4).max(20).toUpperCase().optional(),
+  campaignId: z.string().min(1),
+  userId: z.string().min(1),
+  prizeId: z.string().optional(),
+  validFrom: z.string().datetime({ offset: true }),
+  validUntil: z.string().datetime({ offset: true }),
+  rules: z.string().max(5000).optional(),
+  isActive: z.boolean().default(true),
 });
 
 export type CouponInput = z.infer<typeof couponSchema>;
@@ -94,6 +111,7 @@ export const drawSchema = z.object({
   endDate: z.string().datetime({ offset: true }),
   rules: z.string().min(10).max(5000),
   minCoinsRequired: z.number().int().min(0).optional(),
+  winnerCount: z.number().int().min(1).default(1),
 });
 
 export type DrawInput = z.infer<typeof drawSchema>;
@@ -128,6 +146,7 @@ export const notificationSchema = z.object({
   type: z.nativeEnum(NotificationType),
   audience: z.nativeEnum(NotificationAudience),
   targetCityId: z.string().optional(),
+  targetState: z.string().optional(),
   targetCampaignId: z.string().optional(),
   targetUserId: z.string().optional(),
   data: z.record(z.string()).optional(),
@@ -169,9 +188,47 @@ export const coinSettingsSchema = z.object({
   rewardAmount: z.number().int().min(1),
   requiredForReward: z.number().int().min(1),
   expirationDays: z.number().int().min(0).optional(),
+  campaignBonus: z.number().int().min(0).optional(),
+  referralBonus: z.number().int().min(0).optional(),
+  socialActionBonus: z.number().int().min(0).optional(),
 });
 
 export type CoinSettingsInput = z.infer<typeof coinSettingsSchema>;
+
+/** Validação de scan QR */
+export const qrScanSchema = z.object({
+  payload: z.string().min(1),
+  scannerType: z.string().default('QR_CODE'),
+  location: z
+    .object({
+      latitude: z.number(),
+      longitude: z.number(),
+      accuracy: z.number().optional(),
+    })
+    .optional(),
+  deviceId: z.string().optional(),
+});
+
+export type QrScanInput = z.infer<typeof qrScanSchema>;
+
+/** Participação em sorteio */
+export const drawParticipationSchema = z.object({
+  drawId: z.string().min(1),
+});
+
+export type DrawParticipationInput = z.infer<typeof drawParticipationSchema>;
+
+/** Filtros dashboard */
+export const dashboardFiltersSchema = z.object({
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+  cityId: z.string().optional(),
+  state: z.string().optional(),
+  campaignId: z.string().optional(),
+  userId: z.string().optional(),
+});
+
+export type DashboardFiltersInput = z.infer<typeof dashboardFiltersSchema>;
 
 /** Paginação */
 export const paginationSchema = z.object({

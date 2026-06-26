@@ -3,18 +3,24 @@
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
+import { isDevAuthEnabled } from '@/lib/dev-auth';
 import { Sidebar } from '@/components/layout/sidebar';
+import { FirestoreStatusBanner } from '@/components/layout/firestore-status-banner';
 import { useAuth } from '@/hooks/use-auth';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, signInDev } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
+    if (!loading && !isAuthenticated && isDevAuthEnabled()) {
+      signInDev();
+      return;
+    }
     if (!loading && !isAuthenticated) {
       router.push('/login');
     }
-  }, [isAuthenticated, loading, router]);
+  }, [isAuthenticated, loading, router, signInDev]);
 
   if (loading) {
     return (
@@ -29,7 +35,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex min-h-screen">
       <Sidebar />
-      <main className="flex-1 p-8 overflow-auto">{children}</main>
+      <main className="flex-1 p-8 overflow-auto">
+        <FirestoreStatusBanner />
+        {children}
+      </main>
     </div>
   );
 }

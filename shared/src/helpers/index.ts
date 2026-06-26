@@ -120,6 +120,69 @@ export function slugify(text: string): string {
     .replace(/(^-|-$)/g, '');
 }
 
+/** Retry com backoff exponencial */
+export async function withRetry<T>(
+  fn: () => Promise<T>,
+  maxAttempts = 3,
+  baseDelayMs = 500,
+): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      if (attempt < maxAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, baseDelayMs * attempt));
+      }
+    }
+  }
+  throw lastError;
+}
+
+/** Gera código de indicação */
+export function generateReferralCode(name: string): string {
+  const base = name
+    .toUpperCase()
+    .replace(/[^A-Z]/g, '')
+    .slice(0, 4);
+  const suffix = Math.random().toString(36).substring(2, 6).toUpperCase();
+  return `${base}${suffix}`;
+}
+
+/** Exporta dados para CSV */
+export function toCsv<T extends Record<string, unknown>>(rows: T[], columns: (keyof T)[]): string {
+  const header = columns.join(',');
+  const body = rows
+    .map((row) =>
+      columns
+        .map((col) => {
+          const val = row[col];
+          const str = val == null ? '' : String(val);
+          return str.includes(',') ? `"${str.replace(/"/g, '""')}"` : str;
+        })
+        .join(','),
+    )
+    .join('\n');
+  return `${header}\n${body}`;
+}
+
+/** Parse payload QR para campaignId */
+export function parseQrCampaignId(data: string, scheme = APP_SCHEME): string | undefined {
+  if (data.includes('campaignId=')) {
+    try {
+      const url = new URL(data.replace(`${scheme}://`, 'https://x/'));
+      return url.searchParams.get('campaignId') ?? undefined;
+    } catch {
+      return undefined;
+    }
+  }
+  if (data.startsWith('HP:')) {
+    return data.replace('HP:', '');
+  }
+  return undefined;
+}
+
 /** Debounce helper type */
 export type DebouncedFunction<T extends (...args: unknown[]) => unknown> = (
   ...args: Parameters<T>

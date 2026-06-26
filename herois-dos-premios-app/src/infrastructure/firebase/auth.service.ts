@@ -1,16 +1,24 @@
-import { FIRESTORE_COLLECTIONS, normalizePhone } from '@herois/shared';
+import {
+  FIRESTORE_COLLECTIONS,
+  generateReferralCode,
+  normalizePhone,
+  withRetry,
+} from '@herois/shared';
 import type { User } from '@herois/shared';
 import type { IAuthService } from '@herois/shared';
+import * as Application from 'expo-application';
 import * as SecureStore from 'expo-secure-store';
 import {
-  signInWithPhoneNumber,
   PhoneAuthProvider,
   signInWithCredential,
   signOut as firebaseSignOut,
   onAuthStateChanged,
+  onIdTokenChanged,
+  signInWithPhoneNumber,
+  type ApplicationVerifier,
   type User as FirebaseUser,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { arrayUnion, doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
 import { firebaseAuth, firestore } from './firebase-client';
 
@@ -18,39 +26,75 @@ const SESSION_KEY = 'herois_session_token';
 
 class FirebaseAuthService implements IAuthService {
   private confirmationResult: Awaited<ReturnType<typeof signInWithPhoneNumber>> | null = null;
+  private recaptchaVerifier: ApplicationVerifier | null = null;
+
+  setRecaptchaVerifier(verifier: ApplicationVerifier | null) {
+    this.recaptchaVerifier = verifier;
+  }
 
   async sendOtp(phone: string): Promise<void> {
     const normalizedPhone = normalizePhone(phone);
-    // Em React Native, usar Firebase Phone Auth nativo via expo-firebase-recaptcha ou @react-native-firebase/auth
-    // Para web/dev: RecaptchaVerifier necessário
-    // Esta implementação usa o fluxo via confirmationResult após verifyPhoneNumber nativo
-    this.confirmationResult = null;
-    // Placeholder: integrar com expo-firebase-recaptcha em produção
-    console.info(`[Auth] OTP enviado para ${normalizedPhone}`);
+
+    if (this.recaptchaVerifier) {
+      this.confirmationResult = await withRetry(() =>
+        signInWithPhoneNumber(firebaseAuth, normalizedPhone, this.recaptchaVerifier!),
+      );
+      return;
+    }
+
+    if (process.env.EXPO_PUBLIC_USE_AUTH_EMULATOR === 'true') {
+      return;
+    }
+
+    throw new Error('Verificador reCAPTCHA não configurado. Reinicie o app.');
   }
 
   async verifyOtp(phone: string, code: string): Promise<{ uid: string; token: string }> {
     const normalizedPhone = normalizePhone(phone);
 
+    let user: FirebaseUser;
+
     if (this.confirmationResult) {
       const credential = await this.confirmationResult.confirm(code);
-      const user = credential.user;
-      const token = await user.getIdToken();
-      await SecureStore.setItemAsync(SESSION_KEY, token);
-      return { uid: user.uid, token };
+      user = credential.user;
+    } else {
+      const credential = PhoneAuthProvider.credential(normalizedPhone, code);
+      const result = await signInWithCredential(firebaseAuth, credential);
+      user = result.user;
     }
 
-    // Fallback: credential direto (testes/emulador)
-    const credential = PhoneAuthProvider.credential(normalizedPhone, code);
-    const result = await signInWithCredential(firebaseAuth, credential);
-    const token = await result.user.getIdToken();
+    const token = await user.getIdToken();
     await SecureStore.setItemAsync(SESSION_KEY, token);
-    return { uid: result.user.uid, token };
+
+    await updateDoc(doc(firestore, FIRESTORE_COLLECTIONS.USERS, user.uid), {
+      lastLoginAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }).catch(() => {
+      // perfil ainda não criado no registro
+    });
+
+    return { uid: user.uid, token };
   }
 
   async signOut(): Promise<void> {
+    const uid = firebaseAuth.currentUser?.uid;
+    if (uid) {
+      const userDoc = await getDoc(doc(firestore, FIRESTORE_COLLECTIONS.USERS, uid));
+      const tokens = (userDoc.data()?.fcmTokens as string[]) ?? [];
+      if (tokens.length) {
+        await this.unregisterFcmTokens(uid, tokens);
+      }
+    }
     await SecureStore.deleteItemAsync(SESSION_KEY);
     await firebaseSignOut(firebaseAuth);
+    this.confirmationResult = null;
+  }
+
+  private async unregisterFcmTokens(uid: string, tokens: string[]) {
+    await updateDoc(doc(firestore, FIRESTORE_COLLECTIONS.USERS, uid), {
+      fcmTokens: tokens.slice(0, 0),
+      updatedAt: serverTimestamp(),
+    });
   }
 
   async getCurrentUser(): Promise<User | null> {
@@ -64,7 +108,7 @@ class FirebaseAuthService implements IAuthService {
   }
 
   onAuthStateChanged(callback: (user: User | null) => void): () => void {
-    return onAuthStateChanged(firebaseAuth, async (firebaseUser: FirebaseUser | null) => {
+    const unsubAuth = onAuthStateChanged(firebaseAuth, async (firebaseUser: FirebaseUser | null) => {
       if (!firebaseUser) {
         callback(null);
         return;
@@ -72,6 +116,18 @@ class FirebaseAuthService implements IAuthService {
       const user = await this.getCurrentUser();
       callback(user);
     });
+
+    const unsubToken = onIdTokenChanged(firebaseAuth, async (firebaseUser) => {
+      if (firebaseUser) {
+        const token = await firebaseUser.getIdToken();
+        await SecureStore.setItemAsync(SESSION_KEY, token);
+      }
+    });
+
+    return () => {
+      unsubAuth();
+      unsubToken();
+    };
   }
 
   async createUserProfile(
@@ -83,8 +139,13 @@ class FirebaseAuthService implements IAuthService {
       cityId: string;
       cityName: string;
       state: string;
+      deviceId?: string;
+      referredBy?: string;
     },
   ): Promise<User> {
+    const deviceId = data.deviceId ?? Application.getAndroidId?.() ?? Application.applicationId ?? 'unknown';
+    const referralCode = generateReferralCode(data.name);
+
     const userData = {
       name: data.name,
       phone: normalizePhone(data.phone),
@@ -92,14 +153,22 @@ class FirebaseAuthService implements IAuthService {
       cityId: data.cityId,
       cityName: data.cityName,
       state: data.state,
+      deviceId,
       fcmTokens: [],
       coinBalance: 0,
       isActive: true,
+      completedCampaignIds: [],
+      videosWatched: 0,
+      couponIds: [],
+      drawIds: [],
+      referralCode,
+      referredBy: data.referredBy,
       permissionsGranted: {
         camera: false,
         location: false,
         notifications: false,
       },
+      lastLoginAt: serverTimestamp(),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     };
@@ -121,7 +190,27 @@ class FirebaseAuthService implements IAuthService {
   }
 
   async getSessionToken(): Promise<string | null> {
+    if (firebaseAuth.currentUser) {
+      return firebaseAuth.currentUser.getIdToken();
+    }
     return SecureStore.getItemAsync(SESSION_KEY);
+  }
+
+  async refreshSession(): Promise<string | null> {
+    if (!firebaseAuth.currentUser) return null;
+    const token = await firebaseAuth.currentUser.getIdToken(true);
+    await SecureStore.setItemAsync(SESSION_KEY, token);
+    return token;
+  }
+
+  async registerFcmToken(token: string): Promise<void> {
+    const uid = firebaseAuth.currentUser?.uid;
+    if (!uid || !token) return;
+
+    await updateDoc(doc(firestore, FIRESTORE_COLLECTIONS.USERS, uid), {
+      fcmTokens: arrayUnion(token),
+      updatedAt: serverTimestamp(),
+    });
   }
 }
 

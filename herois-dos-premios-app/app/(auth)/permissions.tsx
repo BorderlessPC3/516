@@ -1,12 +1,12 @@
-import { useCameraPermissions } from 'expo-camera';
 import * as Location from 'expo-location';
-import * as Notifications from 'expo-notifications';
+import { useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 
 import { authService } from '@/services/firebase/auth.service';
 import { firebaseAuth } from '@/services/firebase/firebase-client';
+import { pushNotificationService } from '@/services/push/push.service';
 import { usePermissionsStore } from '@/store';
 
 export default function PermissionsScreen() {
@@ -14,6 +14,7 @@ export default function PermissionsScreen() {
   const setPermission = usePermissionsStore((s) => s.setPermission);
   const [, requestCamera] = useCameraPermissions();
   const [step, setStep] = useState(0);
+  const [loading, setLoading] = useState(false);
 
   const steps = [
     {
@@ -32,6 +33,24 @@ export default function PermissionsScreen() {
         const { status } = await Location.requestForegroundPermissionsAsync();
         const granted = status === 'granted';
         setPermission('location', granted);
+        if (granted) {
+          const uid = firebaseAuth.currentUser?.uid;
+          if (uid) {
+            try {
+              const loc = await Location.getCurrentPositionAsync();
+              await authService.updateUserProfile(uid, {
+                location: {
+                  latitude: loc.coords.latitude,
+                  longitude: loc.coords.longitude,
+                  accuracy: loc.coords.accuracy ?? undefined,
+                  updatedAt: new Date().toISOString(),
+                },
+              });
+            } catch {
+              // localização indisponível
+            }
+          }
+        }
         return granted;
       },
     },
@@ -39,18 +58,23 @@ export default function PermissionsScreen() {
       title: 'Notificações',
       description: 'Receba alertas de campanhas, sorteios e promoções',
       action: async () => {
-        const { status } = await Notifications.requestPermissionsAsync();
-        const granted = status === 'granted';
+        await pushNotificationService.setupAndroidChannel();
+        const granted = await pushNotificationService.requestPermission();
         setPermission('notifications', granted);
-        if (granted) {
-          const token = (await Notifications.getExpoPushTokenAsync()).data;
-          const uid = firebaseAuth.currentUser?.uid;
-          if (uid) {
-            await authService.updateUserProfile(uid, {
-              permissionsGranted: { camera: true, location: true, notifications: true },
-            });
+        const uid = firebaseAuth.currentUser?.uid;
+        if (uid) {
+          const permissions = usePermissionsStore.getState();
+          await authService.updateUserProfile(uid, {
+            permissionsGranted: {
+              camera: permissions.camera,
+              location: permissions.location,
+              notifications: granted,
+            },
+          });
+          if (granted) {
+            const token = await pushNotificationService.getExpoPushToken();
+            if (token) await pushNotificationService.registerToken(token);
           }
-          console.info('[Push] Token registrado:', token);
         }
         return granted;
       },
@@ -58,13 +82,18 @@ export default function PermissionsScreen() {
   ];
 
   const handleNext = async () => {
-    const current = steps[step];
-    await current.action();
+    setLoading(true);
+    try {
+      const current = steps[step];
+      await current.action();
 
-    if (step < steps.length - 1) {
-      setStep(step + 1);
-    } else {
-      router.replace('/(app)/(tabs)/home');
+      if (step < steps.length - 1) {
+        setStep(step + 1);
+      } else {
+        router.replace('/(app)/(tabs)/home');
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -86,8 +115,14 @@ export default function PermissionsScreen() {
       <Text className="text-3xl font-bold text-white mb-4">{current.title}</Text>
       <Text className="text-gray-400 mb-12">{current.description}</Text>
 
-      <TouchableOpacity className="bg-primary py-4 rounded-lg mb-4" onPress={handleNext}>
-        <Text className="text-white text-center font-bold text-lg">Permitir</Text>
+      <TouchableOpacity
+        className="bg-primary py-4 rounded-lg mb-4"
+        onPress={handleNext}
+        disabled={loading}
+      >
+        <Text className="text-white text-center font-bold text-lg">
+          {loading ? 'Configurando...' : 'Permitir'}
+        </Text>
       </TouchableOpacity>
 
       <TouchableOpacity onPress={handleSkip}>

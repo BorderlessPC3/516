@@ -7,6 +7,7 @@ export default function AppLayout() {
       <Stack.Screen name="campaign/[id]" options={{ presentation: 'modal' }} />
       <Stack.Screen name="video/[campaignId]" options={{ presentation: 'fullScreenModal' }} />
       <Stack.Screen name="coupons" />
+      <Stack.Screen name="coupon/[id]" />
       <Stack.Screen name="draws" />
       <Stack.Screen name="social/[campaignId]" />
     </Stack>

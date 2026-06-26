@@ -24,6 +24,8 @@ http://localhost:3000
 
 ## App Mobile
 
+Instale o **Expo Go** na Play Store / App Store (SDK 54). Celular e PC devem estar na mesma rede Wi‑Fi.
+
 ```
 c:\borderless\projetos\516
 npm run dev:app
@@ -33,6 +35,8 @@ npm run dev:app
 c:\borderless\projetos\516\herois-dos-premios-app
 npm start
 ```
+
+Escaneie o QR code com o Expo Go (Android) ou câmera (iOS).
 
 ```
 c:\borderless\projetos\516\herois-dos-premios-app

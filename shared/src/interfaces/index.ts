@@ -31,6 +31,11 @@ export interface ICampaignRepository {
 /** Contrato do serviço de scanner (desacoplado para Vuforia/IA) */
 export interface IScannerService {
   scanQRCode(): Promise<ScanResult>;
+  parseQRCodePayload(data: string): ScanResult;
+  validateAndRegisterScan(
+    payload: string,
+    options?: { location?: { latitude: number; longitude: number }; deviceId?: string },
+  ): Promise<ScanResult>;
   handleDeepLink(url: string): Promise<ScanResult | null>;
   handleUniversalLink(url: string): Promise<ScanResult | null>;
   /** Reservado para integração futura com Vuforia */
@@ -45,6 +50,23 @@ export interface IAuthService {
   signOut(): Promise<void>;
   getCurrentUser(): Promise<User | null>;
   onAuthStateChanged(callback: (user: User | null) => void): () => void;
+  createUserProfile(
+    uid: string,
+    data: {
+      name: string;
+      phone: string;
+      birthDate: string;
+      cityId: string;
+      cityName: string;
+      state: string;
+      deviceId?: string;
+      referredBy?: string;
+    },
+  ): Promise<User>;
+  updateUserProfile(uid: string, data: Partial<User>): Promise<void>;
+  getSessionToken(): Promise<string | null>;
+  refreshSession(): Promise<string | null>;
+  registerFcmToken(token: string): Promise<void>;
 }
 
 /** Contrato de autenticação administrativa */
@@ -75,8 +97,26 @@ export interface IVideoPlayerService {
   getProgress(
     campaignId: string,
     videoId: string,
-  ): Promise<{ currentTime: number; watchedPercent: number } | null>;
-  markCompleted(campaignId: string, videoId: string): Promise<void>;
+  ): Promise<{ currentTime: number; watchedPercent: number; isCompleted: boolean } | null>;
+  markCompleted(
+    campaignId: string,
+    videoId: string,
+    watchedSeconds: number,
+    watchedPercent: number,
+  ): Promise<{ coinsEarned?: number; campaignCompleted?: boolean; couponId?: string }>;
+  getCampaignVideos(campaignId: string): Promise<
+    Array<{
+      id: string;
+      title: string;
+      url: string;
+      sequenceOrder: number;
+      durationSeconds?: number;
+    }>
+  >;
+  trackAnalytics(
+    event: string,
+    metadata?: Record<string, unknown>,
+  ): Promise<void>;
 }
 
 /** Contrato de notificações push */

@@ -1,13 +1,12 @@
-import { ScannerType, APP_SCHEME, APP_UNIVERSAL_LINK_DOMAIN } from '@herois/shared';
+import { ScannerType, withRetry } from '@herois/shared';
 import type { ScanResult } from '@herois/shared';
 import type { IScannerService } from '@herois/shared';
-import { CameraView } from 'expo-camera';
+import { parseQrCampaignId } from '@herois/shared';
 import * as Linking from 'expo-linking';
+import { httpsCallable } from 'firebase/functions';
 
-/**
- * ScannerService - Interface desacoplada para múltiplos tipos de scan.
- * Preparado para extensão com Vuforia (VISUAL_RECOGNITION) e IA.
- */
+import { firebaseFunctions } from '@/services/firebase/firebase-client';
+
 class ScannerService implements IScannerService {
   async scanQRCode(): Promise<ScanResult> {
     return {
@@ -18,15 +17,7 @@ class ScannerService implements IScannerService {
   }
 
   parseQRCodePayload(data: string): ScanResult {
-    let campaignId: string | undefined;
-
-    if (data.includes('campaignId=')) {
-      const url = new URL(data.replace(`${APP_SCHEME}://`, 'https://x/'));
-      campaignId = url.searchParams.get('campaignId') ?? undefined;
-    } else if (data.startsWith('HP:')) {
-      campaignId = data.replace('HP:', '');
-    }
-
+    const campaignId = parseQrCampaignId(data);
     return {
       type: ScannerType.QR_CODE,
       payload: data,
@@ -35,37 +26,49 @@ class ScannerService implements IScannerService {
     };
   }
 
-  async handleDeepLink(url: string): Promise<ScanResult | null> {
-    if (!url.startsWith(`${APP_SCHEME}://`)) return null;
+  async validateAndRegisterScan(
+    payload: string,
+    options?: { location?: { latitude: number; longitude: number }; deviceId?: string },
+  ): Promise<ScanResult> {
+    const validateQrScan = httpsCallable(firebaseFunctions, 'validateQrScan');
 
-    const parsed = Linking.parse(url);
-    const campaignId = parsed.queryParams?.campaignId as string | undefined;
+    const result = await withRetry(async () => {
+      const response = await validateQrScan({
+        payload,
+        location: options?.location,
+        deviceId: options?.deviceId,
+      });
+      return response.data as {
+        isValid: boolean;
+        campaignId?: string;
+        rejectReason?: string;
+        message?: string;
+      };
+    });
 
     return {
-      type: ScannerType.DEEP_LINK,
-      payload: url,
-      campaignId,
-      metadata: parsed.queryParams as Record<string, unknown>,
+      type: ScannerType.QR_CODE,
+      payload,
+      campaignId: result.campaignId,
+      isValid: result.isValid,
+      rejectReason: result.rejectReason as ScanResult['rejectReason'],
+      metadata: { message: result.message },
       timestamp: new Date(),
     };
+  }
+
+  async handleDeepLink(url: string): Promise<ScanResult | null> {
+    const parsed = Linking.parse(url);
+    const campaignId = parsed.queryParams?.campaignId as string | undefined;
+    if (!campaignId) return null;
+
+    return this.validateAndRegisterScan(url, {});
   }
 
   async handleUniversalLink(url: string): Promise<ScanResult | null> {
-    if (!url.includes(APP_UNIVERSAL_LINK_DOMAIN)) return null;
-
-    const parsed = Linking.parse(url);
-    const campaignId = parsed.queryParams?.campaignId as string | undefined;
-
-    return {
-      type: ScannerType.UNIVERSAL_LINK,
-      payload: url,
-      campaignId,
-      metadata: parsed.queryParams as Record<string, unknown>,
-      timestamp: new Date(),
-    };
+    return this.handleDeepLink(url);
   }
 
-  /** Reservado para integração Vuforia - Image Targets / Model Targets */
   async scanVisualRecognition(): Promise<ScanResult> {
     throw new Error('Reconhecimento visual não implementado. Integrar Vuforia Engine SDK.');
   }
@@ -77,6 +80,3 @@ class ScannerService implements IScannerService {
 }
 
 export const scannerService = new ScannerService();
-
-/** Componente reutilizável para scan QR */
-export { CameraView };

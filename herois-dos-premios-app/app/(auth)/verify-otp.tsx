@@ -1,20 +1,23 @@
-import { FIRESTORE_COLLECTIONS } from '@herois/shared';
+import { FIRESTORE_COLLECTIONS, withRetry } from '@herois/shared';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { doc, getDoc } from 'firebase/firestore';
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Alert } from 'react-native';
 
+import { useNetworkStatus } from '@/hooks/use-network';
 import { authService } from '@/services/firebase/auth.service';
 import { firestore } from '@/services/firebase/firebase-client';
 
 export default function VerifyOtpScreen() {
   const router = useRouter();
+  const { isOnline } = useNetworkStatus();
   const params = useLocalSearchParams<{
     phone: string;
     register?: string;
     name?: string;
     birthDate?: string;
     cityId?: string;
+    referredBy?: string;
   }>();
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
@@ -25,9 +28,14 @@ export default function VerifyOtpScreen() {
       return;
     }
 
+    if (!isOnline) {
+      Alert.alert('Sem conexão', 'Conecte-se à internet para verificar o código.');
+      return;
+    }
+
     setLoading(true);
     try {
-      const { uid } = await authService.verifyOtp(params.phone!, code);
+      const { uid } = await withRetry(() => authService.verifyOtp(params.phone!, code), 3);
 
       if (params.register === 'true' && params.name && params.cityId) {
         const citySnap = await getDoc(doc(firestore, FIRESTORE_COLLECTIONS.CITIES, params.cityId));
@@ -39,13 +47,34 @@ export default function VerifyOtpScreen() {
           cityId: params.cityId,
           cityName: city?.name || '',
           state: city?.state || '',
+          referredBy: params.referredBy,
         });
         router.replace('/(auth)/permissions');
       } else {
+        const existing = await authService.getCurrentUser();
+        if (!existing) {
+          Alert.alert('Conta não encontrada', 'Complete seu cadastro primeiro.', [
+            { text: 'Cadastrar', onPress: () => router.replace('/(auth)/register') },
+          ]);
+          return;
+        }
         router.replace('/(app)/(tabs)/home');
       }
     } catch {
       Alert.alert('Erro', 'Código inválido. Tente novamente.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (!isOnline) return;
+    setLoading(true);
+    try {
+      await withRetry(() => authService.sendOtp(params.phone!), 3);
+      Alert.alert('Código reenviado', 'Verifique seu WhatsApp.');
+    } catch {
+      Alert.alert('Erro', 'Não foi possível reenviar o código.');
     } finally {
       setLoading(false);
     }
@@ -74,6 +103,10 @@ export default function VerifyOtpScreen() {
         <Text className="text-white text-center font-bold text-lg">
           {loading ? 'Verificando...' : 'Confirmar'}
         </Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity className="mt-4 py-3" onPress={handleResend} disabled={loading}>
+        <Text className="text-primary text-center">Reenviar código</Text>
       </TouchableOpacity>
     </View>
   );

@@ -43,11 +43,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (isDevAuthEnabled() && hasDevAuthSession()) {
-      setDevSession(true);
-      setAdmin(DEV_MOCK_ADMIN);
+    if (isDevAuthEnabled()) {
+      if (hasDevAuthSession()) {
+        setDevSession(true);
+        setAdmin(DEV_MOCK_ADMIN);
+      }
       setLoading(false);
-      return;
+      if (!isFirebaseConfigured()) return;
     }
 
     if (!isFirebaseConfigured()) {

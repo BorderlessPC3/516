@@ -60,7 +60,9 @@ export const FIRESTORE_COLLECTIONS = {
   CAMPAIGN_VIDEOS: 'campaignVideos',
   CAMPAIGN_IMAGES: 'campaignImages',
   COUPONS: 'coupons',
+  COUPON_TEMPLATES: 'couponTemplates',
   DRAWS: 'draws',
+  DRAW_PARTICIPANTS: 'drawParticipants',
   PRIZES: 'prizes',
   COINS: 'coins',
   COIN_TRANSACTIONS: 'coinTransactions',
@@ -72,6 +74,10 @@ export const FIRESTORE_COLLECTIONS = {
   ADMINS: 'admins',
   AUDIT_LOGS: 'auditLogs',
   VIDEO_VIEWS: 'videoViews',
+  QR_SCANS: 'qrScans',
+  CAMPAIGN_PARTICIPATIONS: 'campaignParticipations',
+  CAMPAIGN_QR_CODES: 'campaignQrCodes',
+  ANALYTICS_EVENTS: 'analyticsEvents',
 } as const;
 
 /** Percentual mínimo para considerar vídeo concluído */
@@ -103,4 +109,14 @@ export const SETTINGS_KEYS = {
   COIN_REQUIRED_FOR_REWARD: 'coinRequiredForReward',
   VIDEO_COMPLETION_THRESHOLD: 'videoCompletionThreshold',
   MAINTENANCE_MODE: 'maintenanceMode',
+  COIN_SETTINGS: 'coinSettings',
 } as const;
+
+/** Dias de inatividade para considerar usuário inativo */
+export const INACTIVE_USER_DAYS = 30;
+
+/** Máximo de tokens FCM por envio */
+export const FCM_BATCH_SIZE = 500;
+
+/** Prefixo QR Code legado */
+export const QR_LEGACY_PREFIX = 'HP:';

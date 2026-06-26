@@ -16,7 +16,14 @@ export default function CoinsPage() {
   const [saved, setSaved] = useState(false);
   const { register, handleSubmit } = useForm<CoinSettingsInput>({
     resolver: zodResolver(coinSettingsSchema),
-    defaultValues: { rewardAmount: 1, requiredForReward: 10, expirationDays: 365 },
+    defaultValues: {
+      rewardAmount: 1,
+      requiredForReward: 10,
+      expirationDays: 365,
+      campaignBonus: 0,
+      referralBonus: 5,
+      socialActionBonus: 1,
+    },
   });
 
   const onSubmit = async (data: CoinSettingsInput) => {
@@ -54,6 +61,18 @@ export default function CoinsPage() {
             <div>
               <label className="text-sm font-medium">Dias para expiração (opcional)</label>
               <Input type="number" {...register('expirationDays', { valueAsNumber: true })} />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Bônus por indicação</label>
+              <Input type="number" {...register('referralBonus', { valueAsNumber: true })} />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Bônus por campanha extra</label>
+              <Input type="number" {...register('campaignBonus', { valueAsNumber: true })} />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Bônus por ação social</label>
+              <Input type="number" {...register('socialActionBonus', { valueAsNumber: true })} />
             </div>
             <Button type="submit">Salvar Configurações</Button>
             {saved && <p className="text-green-400 text-sm">Salvo com sucesso!</p>}

@@ -1,3 +1,4 @@
+import { Image } from 'react-native';
 import { formatDate, toDate } from '@herois/shared';
 import { useQuery } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -33,8 +34,12 @@ export default function CampaignDetailScreen() {
 
   return (
     <ScrollView className="flex-1 bg-secondary">
-      <View className="h-48 bg-accent items-center justify-center">
-        <Text className="text-6xl">🎯</Text>
+      <View className="h-48 bg-accent items-center justify-center overflow-hidden">
+        {campaign.bannerUrl ? (
+          <Image source={{ uri: campaign.bannerUrl }} className="w-full h-full" resizeMode="cover" />
+        ) : (
+          <Text className="text-6xl">🎯</Text>
+        )}
       </View>
 
       <View className="p-4">

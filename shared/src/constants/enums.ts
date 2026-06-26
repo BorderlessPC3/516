@@ -94,8 +94,43 @@ export enum NotificationType {
 export enum NotificationAudience {
   ALL = 'ALL',
   CITY = 'CITY',
+  STATE = 'STATE',
   CAMPAIGN = 'CAMPAIGN',
   USER = 'USER',
+  ACTIVE_USERS = 'ACTIVE_USERS',
+  INACTIVE_USERS = 'INACTIVE_USERS',
+  NO_VIDEOS = 'NO_VIDEOS',
+  NO_COINS = 'NO_COINS',
+  NO_COUPONS = 'NO_COUPONS',
+}
+
+/** Eventos automáticos de push */
+export enum PushEventType {
+  NEW_VIDEO = 'NEW_VIDEO',
+  NEW_PRIZE = 'NEW_PRIZE',
+  NEW_COUPON = 'NEW_COUPON',
+  CAMPAIGN_STARTED = 'CAMPAIGN_STARTED',
+  CAMPAIGN_ENDING = 'CAMPAIGN_ENDING',
+  DRAW_UPCOMING = 'DRAW_UPCOMING',
+  PRIZE_WON = 'PRIZE_WON',
+  VIDEOS_REMAINING = 'VIDEOS_REMAINING',
+  COUPON_EXPIRING = 'COUPON_EXPIRING',
+}
+
+/** Status do QR Code de campanha */
+export enum QrCodeStatus {
+  ACTIVE = 'ACTIVE',
+  EXPIRED = 'EXPIRED',
+  DISABLED = 'DISABLED',
+}
+
+/** Motivo de rejeição de scan */
+export enum ScanRejectReason {
+  INVALID = 'INVALID',
+  EXPIRED = 'EXPIRED',
+  DUPLICATE = 'DUPLICATE',
+  CAMPAIGN_INACTIVE = 'CAMPAIGN_INACTIVE',
+  CAMPAIGN_ENDED = 'CAMPAIGN_ENDED',
 }
 
 /** Status da notificação */

@@ -3,6 +3,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { View, Text, ActivityIndicator } from 'react-native';
 
+import { useDeepLinks } from '@/hooks/use-deep-links';
 import { useAuthStore } from '@/store';
 
 SplashScreen.preventAutoHideAsync();
@@ -10,6 +11,7 @@ SplashScreen.preventAutoHideAsync();
 export default function SplashScreenPage() {
   const router = useRouter();
   const { isAuthenticated, isLoading } = useAuthStore();
+  useDeepLinks();
 
   useEffect(() => {
     if (isLoading) return;

@@ -1,9 +1,10 @@
 import { FIRESTORE_COLLECTIONS, SocialNetwork } from '@herois/shared';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { useState } from 'react';
-import { View, Text, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, Alert, Share } from 'react-native';
 
+import { campaignRepository } from '@/data/repositories/campaign.repository';
 import { firestore, firebaseAuth } from '@/services/firebase/firebase-client';
 
 const NETWORKS = [
@@ -14,8 +15,14 @@ const NETWORKS = [
 ];
 
 export default function SocialActionsScreen() {
-  const { campaignId } = useLocalSearchParams<{ campaignId: string }>();
+  const router = useRouter();
+  const { campaignId, completed, couponId } = useLocalSearchParams<{
+    campaignId: string;
+    completed?: string;
+    couponId?: string;
+  }>();
   const [confirmed, setConfirmed] = useState<Set<string>>(new Set());
+  const isCompletedFlow = completed === 'true';
 
   const handleConfirm = async (network: SocialNetwork) => {
     const uid = firebaseAuth.currentUser?.uid;
@@ -36,12 +43,42 @@ export default function SocialActionsScreen() {
     Alert.alert('Confirmado', `Ação no ${network} registrada com sucesso!`);
   };
 
+  const handleShare = async () => {
+    const campaign = await campaignRepository.findById(campaignId!);
+    await Share.share({
+      message: `Acabei de completar a campanha "${campaign?.name}" no Heróis dos Prêmios! 🏆 Baixe o app e participe também!`,
+      title: 'Heróis dos Prêmios',
+    });
+  };
+
+  const handleNext = () => {
+    router.replace('/(app)/(tabs)/campaigns');
+  };
+
   return (
     <View className="flex-1 bg-secondary pt-16 px-4">
-      <Text className="text-2xl font-bold text-white mb-2">Redes Sociais</Text>
-      <Text className="text-gray-400 mb-8">
-        Confirme que você seguiu/compartilhou nas redes exigidas
-      </Text>
+      {isCompletedFlow ? (
+        <>
+          <Text className="text-3xl font-bold text-white mb-2">🎉 Parabéns!</Text>
+          <Text className="text-gray-400 mb-4">
+            Campanha concluída! Suas moedas foram creditadas.
+            {couponId ? ' Seu cupom está disponível em Meus Cupons.' : ''}
+          </Text>
+          <TouchableOpacity className="bg-primary py-4 rounded-lg mb-4" onPress={handleShare}>
+            <Text className="text-white text-center font-bold text-lg">Compartilhar Conquista</Text>
+          </TouchableOpacity>
+          <TouchableOpacity className="bg-secondary-light py-4 rounded-lg mb-8" onPress={handleNext}>
+            <Text className="text-primary text-center font-bold">Próxima Campanha</Text>
+          </TouchableOpacity>
+        </>
+      ) : (
+        <>
+          <Text className="text-2xl font-bold text-white mb-2">Redes Sociais</Text>
+          <Text className="text-gray-400 mb-8">
+            Confirme que você seguiu/compartilhou nas redes exigidas
+          </Text>
+        </>
+      )}
 
       {NETWORKS.map(({ key, label, icon }) => (
         <TouchableOpacity

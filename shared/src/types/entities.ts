@@ -10,6 +10,9 @@ import {
   NotificationStatus,
   NotificationType,
   PrizeType,
+  PushEventType,
+  QrCodeStatus,
+  ScanRejectReason,
   ScannerType,
   SocialNetwork,
   VideoProcessingStatus,
@@ -29,6 +32,14 @@ export interface BaseEntity {
   updatedAt: FirestoreTimestamp | Date | string;
 }
 
+/** Localização geográfica */
+export interface GeoLocation {
+  latitude: number;
+  longitude: number;
+  accuracy?: number;
+  updatedAt?: FirestoreTimestamp | Date | string;
+}
+
 /** Usuário do aplicativo mobile */
 export interface User extends BaseEntity {
   name: string;
@@ -37,10 +48,18 @@ export interface User extends BaseEntity {
   cityId: string;
   cityName: string;
   state: string;
+  location?: GeoLocation;
+  deviceId?: string;
   fcmTokens: string[];
   coinBalance: number;
   isActive: boolean;
   lastLoginAt?: FirestoreTimestamp | Date | string;
+  completedCampaignIds: string[];
+  videosWatched: number;
+  couponIds: string[];
+  drawIds: string[];
+  referralCode?: string;
+  referredBy?: string;
   permissionsGranted: {
     camera: boolean;
     location: boolean;
@@ -84,6 +103,7 @@ export interface Campaign extends BaseEntity {
   requiredSocialNetworks: SocialNetwork[];
   coinReward: number;
   sequenceOrder?: number;
+  videoIds?: string[];
   viewCount: number;
   conversionCount: number;
   createdBy: string;
@@ -107,6 +127,7 @@ export interface CampaignVideo extends BaseEntity {
   subtitlesUrl?: string;
   subtitlesVtt?: string;
   uploadedBy: string;
+  sequenceOrder?: number;
 }
 
 /** Imagem de campanha */
@@ -130,10 +151,31 @@ export interface Coupon extends BaseEntity {
   userId: string;
   userName?: string;
   userPhone?: string;
+  prizeId?: string;
+  prizeName?: string;
   status: CouponStatus;
   validFrom: FirestoreTimestamp | Date | string;
   validUntil: FirestoreTimestamp | Date | string;
   usedAt?: FirestoreTimestamp | Date | string;
+  qrPayload?: string;
+  rules?: string;
+  isActive: boolean;
+  createdBy: string;
+}
+
+/** Template de cupom (painel) */
+export interface CouponTemplate extends BaseEntity {
+  name: string;
+  campaignId: string;
+  campaignName?: string;
+  prizeId?: string;
+  prizeName?: string;
+  quantity: number;
+  quantityUsed: number;
+  validFrom: FirestoreTimestamp | Date | string;
+  validUntil: FirestoreTimestamp | Date | string;
+  rules: string;
+  isActive: boolean;
   createdBy: string;
 }
 
@@ -150,6 +192,9 @@ export interface Draw extends BaseEntity {
   endDate: FirestoreTimestamp | Date | string;
   rules: string;
   minCoinsRequired?: number;
+  winnerCount: number;
+  winnerUserIds?: string[];
+  winnerNames?: string[];
   winnerUserId?: string;
   winnerName?: string;
   participantCount: number;
@@ -173,6 +218,16 @@ export interface CoinSettings {
   rewardAmount: number;
   requiredForReward: number;
   expirationDays?: number;
+  campaignBonus?: number;
+  referralBonus?: number;
+  socialActionBonus?: number;
+  multipliers?: Record<string, number>;
+  promotions?: Array<{
+    name: string;
+    multiplier: number;
+    startDate: string;
+    endDate: string;
+  }>;
 }
 
 /** Transação de moedas */
@@ -208,8 +263,11 @@ export interface Notification extends BaseEntity {
   data?: Record<string, string>;
   scheduledAt?: FirestoreTimestamp | Date | string;
   sentAt?: FirestoreTimestamp | Date | string;
+  cancelledAt?: FirestoreTimestamp | Date | string;
   sentCount?: number;
   failedCount?: number;
+  targetState?: string;
+  pushEvent?: PushEventType;
   createdBy: string;
 }
 
@@ -272,21 +330,104 @@ export interface ScanResult {
   campaignId?: string;
   metadata?: Record<string, unknown>;
   timestamp: Date;
+  isValid?: boolean;
+  rejectReason?: ScanRejectReason;
+}
+
+/** Registro de leitura QR */
+export interface QrScan extends BaseEntity {
+  userId: string;
+  campaignId: string;
+  qrPayload: string;
+  scannerType: ScannerType;
+  deviceId?: string;
+  location?: GeoLocation;
+  scannedAt: FirestoreTimestamp | Date | string;
+}
+
+/** Participação em campanha */
+export interface CampaignParticipation extends BaseEntity {
+  userId: string;
+  campaignId: string;
+  startedAt: FirestoreTimestamp | Date | string;
+  completedAt?: FirestoreTimestamp | Date | string;
+  videosCompleted: number;
+  totalVideos: number;
+  coinsEarned: number;
+  couponId?: string;
+  isCompleted: boolean;
+}
+
+/** Participante de sorteio */
+export interface DrawParticipant extends BaseEntity {
+  drawId: string;
+  userId: string;
+  userName?: string;
+  userPhone?: string;
+  coinsSpent?: number;
+  isWinner: boolean;
+  participatedAt: FirestoreTimestamp | Date | string;
+}
+
+/** QR Code de campanha */
+export interface CampaignQrCode extends BaseEntity {
+  campaignId: string;
+  payload: string;
+  status: QrCodeStatus;
+  expiresAt?: FirestoreTimestamp | Date | string;
+  maxScans?: number;
+  scanCount: number;
+  createdBy: string;
+}
+
+/** Evento de analytics */
+export interface AnalyticsEvent extends BaseEntity {
+  type: string;
+  userId?: string;
+  campaignId?: string;
+  videoId?: string;
+  metadata?: Record<string, unknown>;
 }
 
 /** KPIs do dashboard */
 export interface DashboardKPIs {
   totalUsers: number;
   activeUsers: number;
+  inactiveUsers: number;
   totalCampaigns: number;
   activeCampaigns: number;
   totalCoupons: number;
   activeCoupons: number;
+  expiredCoupons: number;
   totalDraws: number;
   openDraws: number;
   totalViews: number;
   totalConversions: number;
   conversionRate: number;
+  totalCoins: number;
+  totalQrScans: number;
+  avgWatchTimeSeconds: number;
+  completionRate: number;
+  pushSent: number;
+}
+
+/** Filtros do dashboard */
+export interface DashboardFilters {
+  startDate?: string;
+  endDate?: string;
+  cityId?: string;
+  state?: string;
+  campaignId?: string;
+  userId?: string;
+}
+
+/** Dados de gráfico mensal */
+export interface ChartDataPoint {
+  name: string;
+  views: number;
+  conversions: number;
+  qrScans: number;
+  coins: number;
 }
 
 /** Paginação */
