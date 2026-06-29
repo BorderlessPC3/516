@@ -14,6 +14,8 @@ import {
   Bell,
   Settings,
   LogOut,
+  Handshake,
+  Images,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -35,8 +37,15 @@ const navItems = [
     icon: Megaphone,
     permission: Permission.CAMPAIGNS_READ,
   },
+  {
+    href: '/sponsors',
+    label: 'Patrocinadores',
+    icon: Handshake,
+    permission: Permission.SPONSORS_READ,
+  },
   { href: '/videos', label: 'Vídeos', icon: Video, permission: Permission.VIDEOS_READ },
   { href: '/images', label: 'Imagens', icon: Image, permission: Permission.IMAGES_READ },
+  { href: '/banners', label: 'Banners', icon: Images, permission: Permission.BANNERS_READ },
   { href: '/users', label: 'Usuários', icon: Users, permission: Permission.USERS_READ },
   { href: '/coupons', label: 'Cupons', icon: Ticket, permission: Permission.COUPONS_READ },
   { href: '/draws', label: 'Sorteios', icon: Trophy, permission: Permission.DRAWS_READ },
@@ -53,6 +62,12 @@ const navItems = [
     label: 'Configurações',
     icon: Settings,
     permission: Permission.SETTINGS_READ,
+  },
+  {
+    href: '/settings/scratch-rewards',
+    label: 'Raspadinha / Resgates',
+    icon: Gift,
+    permission: Permission.SETTINGS_WRITE,
   },
 ];
 
