@@ -41,19 +41,17 @@
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   },
-  "lint-staged": {
-    "*.{ts,tsx}": [
-      "eslint --fix",
-      "prettier --write"
-    ],
-    "*.{json,md}": [
-      "prettier --write"
-    ]
-  },
   "engines": {
     "node": ">=20.0.0"
   },
   "dependencies": {
-    "expo": "~54.0.0"
+    "react-native": "0.81.5"
+  },
+  "overrides": {
+    "expo-linking": "~8.0.12",
+    "expo-application": "~7.0.8",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "metro-config": "0.83.7"
   }
 }

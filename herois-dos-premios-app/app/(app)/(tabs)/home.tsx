@@ -3,8 +3,10 @@ import type { Coupon, Draw } from '@herois/shared';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { collection, getDocs, query, where, orderBy, limit } from 'firebase/firestore';
-import { View, Text, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
+import { useEffect, useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, RefreshControl, Image, Linking } from 'react-native';
 
+import { fetchActiveBanners } from '@/data/repositories/banner.repository';
 import { campaignRepository } from '@/data/repositories/campaign.repository';
 import { firestore } from '@/services/firebase/firebase-client';
 import { useAuthStore } from '@/store';
@@ -54,6 +56,24 @@ export default function HomeScreen() {
     },
   });
 
+  const { data: banners = [] } = useQuery({
+    queryKey: ['banners', user?.cityId, user?.state],
+    queryFn: () => fetchActiveBanners(user ?? undefined),
+  });
+
+  const [bannerIndex, setBannerIndex] = useState(0);
+
+  useEffect(() => {
+    if (banners.length <= 1) return;
+    const interval = (banners[bannerIndex]?.rotationSeconds ?? 5) * 1000;
+    const timer = setTimeout(() => {
+      setBannerIndex((i) => (i + 1) % banners.length);
+    }, interval);
+    return () => clearTimeout(timer);
+  }, [banners, bannerIndex]);
+
+  const currentBanner = banners[bannerIndex];
+
   return (
     <ScrollView
       className="flex-1 bg-secondary"
@@ -64,6 +84,28 @@ export default function HomeScreen() {
       <View className="px-4 pt-16 pb-8">
         <Text className="text-gray-400">Olá, {user?.name?.split(' ')[0] || 'Herói'}!</Text>
         <Text className="text-2xl font-bold text-white mt-1">Heróis dos Prêmios</Text>
+
+        {currentBanner && (
+          <TouchableOpacity
+            className="mt-6 rounded-xl overflow-hidden"
+            onPress={() => {
+              if (currentBanner.linkCampaignId) {
+                router.push(`/(app)/campaign/${currentBanner.linkCampaignId}`);
+              } else if (currentBanner.linkUrl) {
+                Linking.openURL(currentBanner.linkUrl);
+              }
+            }}
+          >
+            <Image
+              source={{ uri: currentBanner.imageUrl }}
+              className="w-full h-32"
+              resizeMode="cover"
+            />
+            <Text className="text-white text-sm p-2 bg-black/40 absolute bottom-0 left-0 right-0">
+              {currentBanner.title}
+            </Text>
+          </TouchableOpacity>
+        )}
 
         <View className="bg-accent rounded-xl p-4 mt-6 flex-row justify-between items-center">
           <View>

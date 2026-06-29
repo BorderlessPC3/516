@@ -1,8 +1,8 @@
+import { CampaignDisplayMode, formatDate, toDate } from '@herois/shared';
 import { Image } from 'react-native';
-import { formatDate, toDate } from '@herois/shared';
 import { useQuery } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
 
 import { campaignRepository } from '@/data/repositories/campaign.repository';
 
@@ -76,7 +76,20 @@ export default function CampaignDetailScreen() {
 
         <TouchableOpacity
           className="bg-primary py-4 rounded-lg mt-8"
-          onPress={() => router.push(`/(app)/video/${campaign.id}`)}
+          onPress={() => {
+            if (campaign.displayMode === CampaignDisplayMode.AR) {
+              Alert.alert(
+                'Modo RA em breve',
+                'O reconhecimento de imagem (Vuforia) será habilitado em breve. Por enquanto, assista no modo expandido.',
+                [
+                  { text: 'Cancelar', style: 'cancel' },
+                  { text: 'Assistir', onPress: () => router.push(`/(app)/video/${campaign.id}`) },
+                ],
+              );
+            } else {
+              router.push(`/(app)/video/${campaign.id}`);
+            }
+          }}
         >
           <Text className="text-white text-center font-bold text-lg">Assistir Vídeo</Text>
         </TouchableOpacity>

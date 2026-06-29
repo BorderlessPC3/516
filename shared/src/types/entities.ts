@@ -1,6 +1,8 @@
 import {
   AdminRole,
   AuditAction,
+  BannerScope,
+  CampaignDisplayMode,
   CampaignScope,
   CampaignStatus,
   CoinTransactionType,
@@ -60,6 +62,7 @@ export interface User extends BaseEntity {
   drawIds: string[];
   referralCode?: string;
   referredBy?: string;
+  scratchCardClaimed?: boolean;
   permissionsGranted: {
     camera: boolean;
     location: boolean;
@@ -104,9 +107,80 @@ export interface Campaign extends BaseEntity {
   coinReward: number;
   sequenceOrder?: number;
   videoIds?: string[];
+  displayMode?: CampaignDisplayMode;
+  sponsorIds?: string[];
   viewCount: number;
   conversionCount: number;
   createdBy: string;
+}
+
+/** Patrocinador */
+export interface Sponsor extends BaseEntity {
+  name: string;
+  description?: string;
+  logoUrl?: string;
+  videoId?: string;
+  prizeId?: string;
+  prizeName?: string;
+  socialLinks: Partial<Record<SocialNetwork, string>>;
+  isActive: boolean;
+  createdBy: string;
+}
+
+/** Vínculo campanha-patrocinador (ordem da sequência) */
+export interface CampaignSponsor extends BaseEntity {
+  campaignId: string;
+  sponsorId: string;
+  sponsorName?: string;
+  sequenceOrder: number;
+}
+
+/** Banner publicitário rotativo */
+export interface Banner extends BaseEntity {
+  title: string;
+  imageUrl: string;
+  linkUrl?: string;
+  linkCampaignId?: string;
+  scope: BannerScope;
+  cityId?: string;
+  state?: string;
+  sponsorId?: string;
+  rotationSeconds: number;
+  sequenceOrder: number;
+  isActive: boolean;
+  createdBy: string;
+}
+
+/** Prêmio configurável da raspadinha */
+export interface ScratchCardPrize {
+  id: string;
+  name: string;
+  description?: string;
+  imageUrl?: string;
+  weight: number;
+}
+
+/** Configuração da raspadinha */
+export interface ScratchCardSettings {
+  prizes: ScratchCardPrize[];
+  isActive: boolean;
+}
+
+/** Recompensa resgatável com moedas */
+export interface CoinRewardCatalogItem {
+  id: string;
+  name: string;
+  description?: string;
+  coinCost: number;
+  isActive: boolean;
+}
+
+/** Registro de raspadinha resgatada */
+export interface ScratchCardClaim extends BaseEntity {
+  userId: string;
+  prizeId: string;
+  prizeName: string;
+  prizeDescription?: string;
 }
 
 /** Vídeo de campanha (pipeline S3/CloudFront) */
@@ -298,6 +372,7 @@ export interface VideoView extends BaseEntity {
 export interface SocialAction extends BaseEntity {
   userId: string;
   campaignId: string;
+  sponsorId?: string;
   network: SocialNetwork;
   confirmed: boolean;
   confirmedAt?: FirestoreTimestamp | Date | string;
@@ -338,6 +413,7 @@ export interface ScanResult {
 export interface QrScan extends BaseEntity {
   userId: string;
   campaignId: string;
+  sponsorId?: string;
   qrPayload: string;
   scannerType: ScannerType;
   deviceId?: string;
@@ -356,6 +432,8 @@ export interface CampaignParticipation extends BaseEntity {
   coinsEarned: number;
   couponId?: string;
   isCompleted: boolean;
+  currentStepIndex?: number;
+  completedSponsorIds?: string[];
 }
 
 /** Participante de sorteio */
@@ -372,6 +450,7 @@ export interface DrawParticipant extends BaseEntity {
 /** QR Code de campanha */
 export interface CampaignQrCode extends BaseEntity {
   campaignId: string;
+  sponsorId?: string;
   payload: string;
   status: QrCodeStatus;
   expiresAt?: FirestoreTimestamp | Date | string;

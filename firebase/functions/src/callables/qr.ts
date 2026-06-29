@@ -6,33 +6,25 @@ import {
   ScannerType,
   isCampaignActive,
   parseQrCampaignId,
+  parseQrSponsorId,
   toDate,
 } from '@herois/shared';
 import { FieldValue } from 'firebase-admin/firestore';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 
 import { assertAuthenticated } from '../services/admin-guard';
+import { getCampaignSponsorSteps, resolveSponsorCampaignId } from '../services/sponsor.service';
 import { db } from '../config/firebase';
 
-export const validateQrScan = onCall(async (request) => {
-  const userId = await assertAuthenticated(request.auth?.uid);
-  const { payload, location, deviceId } = request.data as {
-    payload: string;
-    location?: { latitude: number; longitude: number; accuracy?: number };
-    deviceId?: string;
-  };
-
-  if (!payload) throw new HttpsError('invalid-argument', 'Payload QR é obrigatório');
-
-  const campaignId = parseQrCampaignId(payload);
-  if (!campaignId) {
-    return {
-      isValid: false,
-      rejectReason: ScanRejectReason.INVALID,
-      message: 'QR Code inválido',
-    };
-  }
-
+async function validateCampaignScan(
+  userId: string,
+  campaignId: string,
+  payload: string,
+  location?: { latitude: number; longitude: number; accuracy?: number },
+  deviceId?: string,
+  sponsorId?: string,
+  startStepIndex?: number,
+) {
   const campaignRef = db.collection(FIRESTORE_COLLECTIONS.CAMPAIGNS).doc(campaignId);
   const campaignSnap = await campaignRef.get();
   if (!campaignSnap.exists) {
@@ -46,7 +38,14 @@ export const validateQrScan = onCall(async (request) => {
   const campaign = campaignSnap.data()!;
   const now = new Date();
 
-  if (!isCampaignActive(campaign.status as string, toDate(campaign.startDate), toDate(campaign.endDate), now)) {
+  if (
+    !isCampaignActive(
+      campaign.status as string,
+      toDate(campaign.startDate),
+      toDate(campaign.endDate),
+      now,
+    )
+  ) {
     const reason =
       campaign.status === CampaignStatus.ENDED || toDate(campaign.endDate) < now
         ? ScanRejectReason.CAMPAIGN_ENDED
@@ -61,7 +60,6 @@ export const validateQrScan = onCall(async (request) => {
 
   const qrCodeSnap = await db
     .collection(FIRESTORE_COLLECTIONS.CAMPAIGN_QR_CODES)
-    .where('campaignId', '==', campaignId)
     .where('payload', '==', payload)
     .limit(1)
     .get();
@@ -95,14 +93,16 @@ export const validateQrScan = onCall(async (request) => {
     }
   }
 
-  const duplicateSnap = await db
+  const duplicateQuery = db
     .collection(FIRESTORE_COLLECTIONS.QR_SCANS)
     .where('userId', '==', userId)
-    .where('campaignId', '==', campaignId)
-    .limit(1)
-    .get();
+    .where('campaignId', '==', campaignId);
 
-  if (!duplicateSnap.empty) {
+  const duplicateSnap = sponsorId
+    ? await duplicateQuery.where('sponsorId', '==', sponsorId).limit(1).get()
+    : await duplicateQuery.limit(1).get();
+
+  if (!duplicateSnap.empty && !sponsorId) {
     return {
       isValid: false,
       rejectReason: ScanRejectReason.DUPLICATE,
@@ -111,12 +111,15 @@ export const validateQrScan = onCall(async (request) => {
     };
   }
 
-  const batch = db.batch();
+  const steps = await getCampaignSponsorSteps(db, campaignId);
+  const totalVideos = steps.length || 1;
 
+  const batch = db.batch();
   const scanRef = db.collection(FIRESTORE_COLLECTIONS.QR_SCANS).doc();
   batch.set(scanRef, {
     userId,
     campaignId,
+    sponsorId: sponsorId ?? null,
     qrPayload: payload,
     scannerType: ScannerType.QR_CODE,
     deviceId,
@@ -135,7 +138,8 @@ export const validateQrScan = onCall(async (request) => {
       campaignId,
       startedAt: FieldValue.serverTimestamp(),
       videosCompleted: 0,
-      totalVideos: 0,
+      totalVideos,
+      currentStepIndex: startStepIndex ?? 0,
       coinsEarned: 0,
       isCompleted: false,
       createdAt: FieldValue.serverTimestamp(),
@@ -156,7 +160,54 @@ export const validateQrScan = onCall(async (request) => {
   return {
     isValid: true,
     campaignId,
+    sponsorId,
+    startStepIndex: startStepIndex ?? 0,
     scanId: scanRef.id,
     message: 'QR Code validado com sucesso',
   };
+}
+
+export const validateQrScan = onCall(async (request) => {
+  const userId = await assertAuthenticated(request.auth?.uid);
+  const { payload, location, deviceId } = request.data as {
+    payload: string;
+    location?: { latitude: number; longitude: number; accuracy?: number };
+    deviceId?: string;
+  };
+
+  if (!payload) throw new HttpsError('invalid-argument', 'Payload QR é obrigatório');
+
+  const sponsorId = parseQrSponsorId(payload);
+  if (sponsorId) {
+    const campaignId = await resolveSponsorCampaignId(db, sponsorId);
+    if (!campaignId) {
+      return {
+        isValid: false,
+        rejectReason: ScanRejectReason.INVALID,
+        message: 'Patrocinador não vinculado a campanha',
+      };
+    }
+    const steps = await getCampaignSponsorSteps(db, campaignId);
+    const stepIndex = steps.findIndex((s) => s.sponsorId === sponsorId);
+    return validateCampaignScan(
+      userId,
+      campaignId,
+      payload,
+      location,
+      deviceId,
+      sponsorId,
+      stepIndex >= 0 ? stepIndex : 0,
+    );
+  }
+
+  const campaignId = parseQrCampaignId(payload);
+  if (!campaignId) {
+    return {
+      isValid: false,
+      rejectReason: ScanRejectReason.INVALID,
+      message: 'QR Code inválido',
+    };
+  }
+
+  return validateCampaignScan(userId, campaignId, payload, location, deviceId);
 });

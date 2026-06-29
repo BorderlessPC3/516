@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { PHONE_REGEX } from '../constants';
 import {
   AdminRole,
+  BannerScope,
+  CampaignDisplayMode,
   CampaignScope,
   CampaignStatus,
   DrawStatus,
@@ -12,6 +14,7 @@ import {
   SocialNetwork,
   VideoScope,
 } from '../constants/enums';
+import { MAX_PIZZA_COUPONS_PER_PURCHASE } from '../constants';
 
 /** Telefone brasileiro formatado +55XXXXXXXXXXX */
 export const phoneSchema = z
@@ -68,6 +71,8 @@ export const campaignSchema = z.object({
   requiredSocialNetworks: z.array(z.nativeEnum(SocialNetwork)).default([]),
   coinReward: z.number().int().min(0).default(1),
   sequenceOrder: z.number().int().min(0).optional(),
+  displayMode: z.nativeEnum(CampaignDisplayMode).default(CampaignDisplayMode.EXPANDED),
+  sponsorIds: z.array(z.string()).optional(),
 });
 
 export type CampaignInput = z.infer<typeof campaignSchema>;
@@ -168,6 +173,7 @@ export type VideoProgressInput = z.infer<typeof videoProgressSchema>;
 /** Confirmação de rede social */
 export const socialActionSchema = z.object({
   campaignId: z.string().min(1),
+  sponsorId: z.string().optional(),
   network: z.nativeEnum(SocialNetwork),
 });
 
@@ -194,6 +200,93 @@ export const coinSettingsSchema = z.object({
 });
 
 export type CoinSettingsInput = z.infer<typeof coinSettingsSchema>;
+
+/** Patrocinador CRUD */
+export const sponsorSchema = z.object({
+  name: z.string().min(2).max(200),
+  description: z.string().max(2000).optional(),
+  logoUrl: z.string().url().optional().or(z.literal('')),
+  videoId: z.string().optional(),
+  prizeId: z.string().optional(),
+  socialLinks: z
+    .object({
+      INSTAGRAM: z.string().url().optional().or(z.literal('')),
+      FACEBOOK: z.string().url().optional().or(z.literal('')),
+      TIKTOK: z.string().url().optional().or(z.literal('')),
+      WHATSAPP: z.string().url().optional().or(z.literal('')),
+    })
+    .optional()
+    .default({}),
+  isActive: z.boolean().default(true),
+});
+
+export type SponsorInput = z.infer<typeof sponsorSchema>;
+
+/** Banner CRUD */
+export const bannerSchema = z.object({
+  title: z.string().min(2).max(200),
+  imageUrl: z.string().url(),
+  linkUrl: z.string().url().optional().or(z.literal('')),
+  linkCampaignId: z.string().optional(),
+  scope: z.nativeEnum(BannerScope),
+  cityId: z.string().optional(),
+  state: z.string().optional(),
+  sponsorId: z.string().optional(),
+  rotationSeconds: z.number().int().min(2).max(60).default(5),
+  sequenceOrder: z.number().int().min(0).default(0),
+  isActive: z.boolean().default(true),
+});
+
+export type BannerInput = z.infer<typeof bannerSchema>;
+
+/** Prêmio da raspadinha */
+export const scratchCardPrizeSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(2).max(200),
+  description: z.string().max(500).optional(),
+  imageUrl: z.string().url().optional().or(z.literal('')),
+  weight: z.number().int().min(1).default(1),
+});
+
+export const scratchCardSettingsSchema = z.object({
+  prizes: z.array(scratchCardPrizeSchema).min(1),
+  isActive: z.boolean().default(true),
+});
+
+export type ScratchCardSettingsInput = z.infer<typeof scratchCardSettingsSchema>;
+
+/** Catálogo de resgate de moedas */
+export const coinRewardCatalogItemSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(2).max(200),
+  description: z.string().max(500).optional(),
+  coinCost: z.number().int().min(1),
+  isActive: z.boolean().default(true),
+});
+
+export const coinRewardsCatalogSchema = z.object({
+  rewards: z.array(coinRewardCatalogItemSchema),
+});
+
+export type CoinRewardsCatalogInput = z.infer<typeof coinRewardsCatalogSchema>;
+
+/** Geração de cupons por compra de pizza */
+export const purchaseCouponsSchema = z.object({
+  campaignId: z.string().min(1),
+  userId: z.string().min(1),
+  pizzaCount: z.number().int().min(1).max(MAX_PIZZA_COUPONS_PER_PURCHASE),
+});
+
+export type PurchaseCouponsInput = z.infer<typeof purchaseCouponsSchema>;
+
+/** Vínculo campanha-patrocinador */
+export const campaignSponsorLinkSchema = z.object({
+  campaignId: z.string().min(1),
+  sponsorId: z.string().min(1),
+  sequenceOrder: z.number().int().min(0),
+});
+
+export type CampaignSponsorLinkInput = z.infer<typeof campaignSponsorLinkSchema>;
 
 /** Validação de scan QR */
 export const qrScanSchema = z.object({

@@ -41,6 +41,8 @@ class ScannerService implements IScannerService {
       return response.data as {
         isValid: boolean;
         campaignId?: string;
+        sponsorId?: string;
+        startStepIndex?: number;
         rejectReason?: string;
         message?: string;
       };
@@ -52,7 +54,11 @@ class ScannerService implements IScannerService {
       campaignId: result.campaignId,
       isValid: result.isValid,
       rejectReason: result.rejectReason as ScanResult['rejectReason'],
-      metadata: { message: result.message },
+      metadata: {
+        message: result.message,
+        sponsorId: result.sponsorId,
+        startStepIndex: result.startStepIndex,
+      },
       timestamp: new Date(),
     };
   }

@@ -2,7 +2,6 @@ import {
   CoinTransactionType,
   FIRESTORE_COLLECTIONS,
   VIDEO_COMPLETION_THRESHOLD,
-  VideoProcessingStatus,
 } from '@herois/shared';
 import { FieldValue } from 'firebase-admin/firestore';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
@@ -10,36 +9,16 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { assertAuthenticated } from '../services/admin-guard';
 import { creditCoins, getCoinSettings } from '../services/coins.service';
 import { generateCouponForUser } from '../services/coupon.service';
+import { getCampaignSponsorSteps } from '../services/sponsor.service';
 import { db } from '../config/firebase';
-
-async function getCampaignVideos(campaignId: string) {
-  const snap = await db
-    .collection(FIRESTORE_COLLECTIONS.CAMPAIGN_VIDEOS)
-    .where('campaignId', '==', campaignId)
-    .where('processingStatus', '==', VideoProcessingStatus.READY)
-    .get();
-
-  return snap.docs
-    .map((d) => ({ id: d.id, ...d.data() }))
-    .sort((a, b) => (a.sequenceOrder ?? 0) - (b.sequenceOrder ?? 0));
-}
-
-async function countCompletedVideos(userId: string, campaignId: string, videoIds: string[]) {
-  let completed = 0;
-  for (const videoId of videoIds) {
-    const progressId = `${userId}_${campaignId}_${videoId}`;
-    const snap = await db.collection(FIRESTORE_COLLECTIONS.VIDEO_PROGRESS).doc(progressId).get();
-    if (snap.exists && snap.data()?.isCompleted) completed++;
-  }
-  return completed;
-}
 
 export const onVideoCompleted = onCall(async (request) => {
   const userId = await assertAuthenticated(request.auth?.uid);
 
-  const { campaignId, videoId, watchedSeconds, watchedPercent } = request.data as {
+  const { campaignId, videoId, sponsorId, watchedSeconds, watchedPercent } = request.data as {
     campaignId: string;
     videoId: string;
+    sponsorId?: string;
     watchedSeconds: number;
     watchedPercent: number;
   };
@@ -52,7 +31,6 @@ export const onVideoCompleted = onCall(async (request) => {
     throw new HttpsError('failed-precondition', 'Vídeo não foi assistido até o mínimo exigido');
   }
 
-  const idempotencyKey = `video_${userId}_${campaignId}_${videoId}`;
   const existingView = await db
     .collection(FIRESTORE_COLLECTIONS.VIDEO_VIEWS)
     .where('userId', '==', userId)
@@ -61,7 +39,18 @@ export const onVideoCompleted = onCall(async (request) => {
     .get();
 
   if (!existingView.empty) {
-    return { success: true, alreadyCompleted: true, coinsEarned: 0 };
+    const participationId = `${userId}_${campaignId}`;
+    const partSnap = await db
+      .collection(FIRESTORE_COLLECTIONS.CAMPAIGN_PARTICIPATIONS)
+      .doc(participationId)
+      .get();
+    return {
+      success: true,
+      alreadyCompleted: true,
+      coinsEarned: 0,
+      currentStepIndex: partSnap.data()?.currentStepIndex ?? 0,
+      campaignCompleted: partSnap.data()?.isCompleted ?? false,
+    };
   }
 
   const progressId = `${userId}_${campaignId}_${videoId}`;
@@ -80,6 +69,10 @@ export const onVideoCompleted = onCall(async (request) => {
     { merge: true },
   );
 
+  const userRef = db.collection(FIRESTORE_COLLECTIONS.USERS).doc(userId);
+  const userSnapBefore = await userRef.get();
+  const videosWatchedBefore = (userSnapBefore.data()?.videosWatched as number) ?? 0;
+
   const batch = db.batch();
   const viewRef = db.collection(FIRESTORE_COLLECTIONS.VIDEO_VIEWS).doc();
   batch.set(viewRef, {
@@ -93,31 +86,76 @@ export const onVideoCompleted = onCall(async (request) => {
     updatedAt: FieldValue.serverTimestamp(),
   });
 
-  batch.update(db.collection(FIRESTORE_COLLECTIONS.USERS).doc(userId), {
+  batch.update(userRef, {
     videosWatched: FieldValue.increment(1),
     updatedAt: FieldValue.serverTimestamp(),
   });
 
   await batch.commit();
 
-  const videos = await getCampaignVideos(campaignId);
-  const videoIds = videos.length > 0 ? videos.map((v) => v.id) : [videoId];
-  const completedCount = await countCompletedVideos(userId, campaignId, videoIds);
-  const campaignCompleted = completedCount >= videoIds.length;
+  const sponsorSteps = await getCampaignSponsorSteps(db, campaignId);
+  const totalSteps = sponsorSteps.length || 1;
 
+  let completedSponsorIds: string[] = [];
+  if (sponsorId) {
+    const participationId = `${userId}_${campaignId}`;
+    const partSnap = await db
+      .collection(FIRESTORE_COLLECTIONS.CAMPAIGN_PARTICIPATIONS)
+      .doc(participationId)
+      .get();
+    const existing = (partSnap.data()?.completedSponsorIds as string[]) ?? [];
+    if (!existing.includes(sponsorId)) {
+      completedSponsorIds = [...existing, sponsorId];
+    } else {
+      completedSponsorIds = existing;
+    }
+  }
+
+  const completedCount = sponsorId
+    ? completedSponsorIds.length
+    : Math.min(totalSteps, videosWatchedBefore + 1);
+
+  const currentStepIndex = sponsorId
+    ? sponsorSteps.findIndex((s) => s.sponsorId === sponsorId) + 1
+    : completedCount;
+
+  const campaignCompleted = completedCount >= totalSteps;
   const participationId = `${userId}_${campaignId}`;
+
   await db.collection(FIRESTORE_COLLECTIONS.CAMPAIGN_PARTICIPATIONS).doc(participationId).set(
     {
+      userId,
+      campaignId,
       videosCompleted: completedCount,
-      totalVideos: videoIds.length,
+      totalVideos: totalSteps,
+      currentStepIndex,
+      completedSponsorIds,
       updatedAt: FieldValue.serverTimestamp(),
     },
     { merge: true },
   );
 
+  const coinSettings = await getCoinSettings(db);
+  const requiredForReward = (coinSettings.requiredForReward as number) ?? 15;
+  const rewardAmount = (coinSettings.rewardAmount as number) ?? 1;
+  const newVideosWatched = videosWatchedBefore + 1;
+
   let coinsEarned = 0;
-  let couponId: string | undefined;
   let newBalance = 0;
+  let couponId: string | undefined;
+
+  if (newVideosWatched > 0 && newVideosWatched % requiredForReward === 0) {
+    const milestone = newVideosWatched / requiredForReward;
+    newBalance = await creditCoins(db, {
+      userId,
+      amount: rewardAmount,
+      type: CoinTransactionType.EARNED,
+      description: `Moeda por assistir ${requiredForReward} vídeos`,
+      campaignId,
+      idempotencyKey: `coin_milestone_${userId}_${milestone}`,
+    });
+    coinsEarned += rewardAmount;
+  }
 
   if (campaignCompleted) {
     const participationSnap = await db
@@ -125,13 +163,21 @@ export const onVideoCompleted = onCall(async (request) => {
       .doc(participationId)
       .get();
     if (participationSnap.exists && participationSnap.data()?.isCompleted) {
-      return { success: true, alreadyCompleted: true, campaignCompleted: true, coinsEarned: 0 };
+      return {
+        success: true,
+        alreadyCompleted: true,
+        campaignCompleted: true,
+        coinsEarned,
+        newBalance,
+        currentStepIndex,
+        videosCompleted: completedCount,
+        totalVideos: totalSteps,
+      };
     }
 
     const campaignSnap = await db.collection(FIRESTORE_COLLECTIONS.CAMPAIGNS).doc(campaignId).get();
     const campaign = campaignSnap.data() ?? {};
-    const coinSettings = await getCoinSettings(db);
-    const reward = (campaign.coinReward as number) ?? coinSettings.rewardAmount ?? 1;
+    const campaignReward = (campaign.coinReward as number) ?? 0;
 
     await db.collection(FIRESTORE_COLLECTIONS.CAMPAIGNS).doc(campaignId).update({
       viewCount: FieldValue.increment(1),
@@ -139,19 +185,19 @@ export const onVideoCompleted = onCall(async (request) => {
       updatedAt: FieldValue.serverTimestamp(),
     });
 
-    newBalance = await creditCoins(db, {
-      userId,
-      amount: reward,
-      type: CoinTransactionType.EARNED,
-      description: 'Moedas ganhas por completar campanha',
-      campaignId,
-      idempotencyKey: `campaign_${userId}_${campaignId}`,
-    });
-    coinsEarned = reward;
+    if (campaignReward > 0) {
+      newBalance = await creditCoins(db, {
+        userId,
+        amount: campaignReward,
+        type: CoinTransactionType.BONUS,
+        description: 'Bônus por completar campanha',
+        campaignId,
+        idempotencyKey: `campaign_${userId}_${campaignId}`,
+      });
+      coinsEarned += campaignReward;
+    }
 
-    const userSnap = await db.collection(FIRESTORE_COLLECTIONS.USERS).doc(userId).get();
-    const userData = userSnap.data() ?? {};
-
+    const userData = (await userRef.get()).data() ?? {};
     couponId = await generateCouponForUser(db, {
       userId,
       campaignId,
@@ -165,14 +211,14 @@ export const onVideoCompleted = onCall(async (request) => {
       {
         isCompleted: true,
         completedAt: FieldValue.serverTimestamp(),
-        coinsEarned: reward,
+        coinsEarned: campaignReward,
         couponId,
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true },
     );
 
-    await db.collection(FIRESTORE_COLLECTIONS.USERS).doc(userId).update({
+    await userRef.update({
       completedCampaignIds: FieldValue.arrayUnion(campaignId),
       updatedAt: FieldValue.serverTimestamp(),
     });
@@ -183,7 +229,7 @@ export const onVideoCompleted = onCall(async (request) => {
     userId,
     campaignId,
     videoId,
-    metadata: { watchedSeconds, watchedPercent, campaignCompleted },
+    metadata: { watchedSeconds, watchedPercent, campaignCompleted, sponsorId },
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
@@ -194,8 +240,11 @@ export const onVideoCompleted = onCall(async (request) => {
     newBalance,
     campaignCompleted,
     couponId,
+    currentStepIndex,
     videosCompleted: completedCount,
-    totalVideos: videoIds.length,
+    totalVideos: totalSteps,
+    videosUntilNextCoin:
+      requiredForReward - (newVideosWatched % requiredForReward || requiredForReward),
   };
 });
 
@@ -219,4 +268,13 @@ export const trackVideoAnalytics = onCall(async (request) => {
   });
 
   return { success: true };
+});
+
+export const getCampaignSponsorSequence = onCall(async (request) => {
+  await assertAuthenticated(request.auth?.uid);
+  const { campaignId } = request.data as { campaignId: string };
+  if (!campaignId) throw new HttpsError('invalid-argument', 'campaignId é obrigatório');
+
+  const steps = await getCampaignSponsorSteps(db, campaignId);
+  return { success: true, steps };
 });

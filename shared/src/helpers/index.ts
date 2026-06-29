@@ -169,6 +169,7 @@ export function toCsv<T extends Record<string, unknown>>(rows: T[], columns: (ke
 
 /** Parse payload QR para campaignId */
 export function parseQrCampaignId(data: string, scheme = APP_SCHEME): string | undefined {
+  if (data.startsWith('HP:SPONSOR:')) return undefined;
   if (data.includes('campaignId=')) {
     try {
       const url = new URL(data.replace(`${scheme}://`, 'https://x/'));
@@ -177,10 +178,40 @@ export function parseQrCampaignId(data: string, scheme = APP_SCHEME): string | u
       return undefined;
     }
   }
-  if (data.startsWith('HP:')) {
-    return data.replace('HP:', '');
+  if (data.startsWith('HP:CAMPAIGN:')) {
+    return data.replace('HP:CAMPAIGN:', '');
+  }
+  if (data.startsWith('HP:') && !data.startsWith('HP:COUPON:')) {
+    const rest = data.replace('HP:', '');
+    if (!rest.includes(':')) return rest;
   }
   return undefined;
+}
+
+/** Parse payload QR para sponsorId */
+export function parseQrSponsorId(data: string): string | undefined {
+  if (data.startsWith('HP:SPONSOR:')) {
+    return data.replace('HP:SPONSOR:', '');
+  }
+  if (data.includes('sponsorId=')) {
+    try {
+      const url = new URL(data.replace(`${APP_SCHEME}://`, 'https://x/'));
+      return url.searchParams.get('sponsorId') ?? undefined;
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+/** Gera payload QR para patrocinador */
+export function buildSponsorQrPayload(sponsorId: string): string {
+  return `HP:SPONSOR:${sponsorId}`;
+}
+
+/** Gera payload QR para campanha */
+export function buildCampaignQrPayload(campaignId: string): string {
+  return `HP:CAMPAIGN:${campaignId}`;
 }
 
 /** Debounce helper type */

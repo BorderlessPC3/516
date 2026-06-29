@@ -30,6 +30,10 @@ export const ROLE_PERMISSIONS: Record<AdminRole, Permission[]> = {
     Permission.NOTIFICATIONS_WRITE,
     Permission.AUDIT_READ,
     Permission.SETTINGS_READ,
+    Permission.SPONSORS_READ,
+    Permission.SPONSORS_WRITE,
+    Permission.BANNERS_READ,
+    Permission.BANNERS_WRITE,
   ],
   [AdminRole.OPERADOR]: [
     Permission.DASHBOARD_VIEW,
@@ -43,6 +47,8 @@ export const ROLE_PERMISSIONS: Record<AdminRole, Permission[]> = {
     Permission.COINS_READ,
     Permission.NOTIFICATIONS_READ,
     Permission.NOTIFICATIONS_WRITE,
+    Permission.SPONSORS_READ,
+    Permission.BANNERS_READ,
   ],
 };
 
@@ -78,6 +84,10 @@ export const FIRESTORE_COLLECTIONS = {
   CAMPAIGN_PARTICIPATIONS: 'campaignParticipations',
   CAMPAIGN_QR_CODES: 'campaignQrCodes',
   ANALYTICS_EVENTS: 'analyticsEvents',
+  SPONSORS: 'sponsors',
+  CAMPAIGN_SPONSORS: 'campaignSponsors',
+  BANNERS: 'banners',
+  SCRATCH_CARD_CLAIMS: 'scratchCardClaims',
 } as const;
 
 /** Percentual mínimo para considerar vídeo concluído */
@@ -110,7 +120,12 @@ export const SETTINGS_KEYS = {
   VIDEO_COMPLETION_THRESHOLD: 'videoCompletionThreshold',
   MAINTENANCE_MODE: 'maintenanceMode',
   COIN_SETTINGS: 'coinSettings',
+  SCRATCH_CARD: 'scratchCard',
+  COIN_REWARDS: 'coinRewards',
 } as const;
+
+/** Máximo de cupons gerados por compra de pizza */
+export const MAX_PIZZA_COUPONS_PER_PURCHASE = 3;
 
 /** Dias de inatividade para considerar usuário inativo */
 export const INACTIVE_USER_DAYS = 30;

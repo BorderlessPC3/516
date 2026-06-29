@@ -12,6 +12,20 @@ export enum CampaignScope {
   MUNICIPAL = 'MUNICIPAL',
 }
 
+/** Modo de exibição da campanha */
+export enum CampaignDisplayMode {
+  EXPANDED = 'EXPANDED',
+  AR = 'AR',
+}
+
+/** Escopo geográfico de banners */
+export enum BannerScope {
+  NATIONAL = 'NATIONAL',
+  REGIONAL = 'REGIONAL',
+  MUNICIPAL = 'MUNICIPAL',
+  SPONSOR = 'SPONSOR',
+}
+
 /** Status operacional da campanha */
 export enum CampaignStatus {
   DRAFT = 'DRAFT',
@@ -189,4 +203,8 @@ export enum Permission {
   AUDIT_READ = 'audit:read',
   SETTINGS_READ = 'settings:read',
   SETTINGS_WRITE = 'settings:write',
+  SPONSORS_READ = 'sponsors:read',
+  SPONSORS_WRITE = 'sponsors:write',
+  BANNERS_READ = 'banners:read',
+  BANNERS_WRITE = 'banners:write',
 }

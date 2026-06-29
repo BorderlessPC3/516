@@ -2,12 +2,14 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
+    "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"],
       "@/components/*": ["src/presentation/components/*"],
       "@/services/*": ["src/infrastructure/*"],
       "@/hooks/*": ["src/presentation/hooks/*"],
+      "@/store": ["src/presentation/store"],
       "@/store/*": ["src/presentation/store/*"],
       "@/types/*": ["src/core/types/*"]
     }

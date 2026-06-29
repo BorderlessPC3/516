@@ -58,7 +58,16 @@ export default function ScannerScreen() {
       const result = await scannerService.validateAndRegisterScan(data, { location, deviceId });
 
       if (result.isValid && result.campaignId) {
-        router.push(`/(app)/campaign/${result.campaignId}`);
+        const sponsorId = result.metadata?.sponsorId as string | undefined;
+        const startStep = result.metadata?.startStepIndex as number | undefined;
+        if (sponsorId) {
+          router.push({
+            pathname: '/(app)/video/[campaignId]',
+            params: { campaignId: result.campaignId, startStep: String(startStep ?? 0) },
+          });
+        } else {
+          router.push(`/(app)/campaign/${result.campaignId}`);
+        }
       } else {
         Alert.alert(
           'QR Code inválido',

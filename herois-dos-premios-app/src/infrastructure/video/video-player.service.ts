@@ -79,6 +79,7 @@ class VideoPlayerService implements IVideoPlayerService {
     videoId: string,
     watchedSeconds: number,
     watchedPercent: number,
+    sponsorId?: string,
   ) {
     if (watchedPercent < VIDEO_COMPLETION_THRESHOLD) {
       return { coinsEarned: 0, campaignCompleted: false };
@@ -89,6 +90,7 @@ class VideoPlayerService implements IVideoPlayerService {
       const result = await onVideoCompleted({
         campaignId,
         videoId,
+        sponsorId,
         watchedSeconds,
         watchedPercent,
       });
@@ -97,6 +99,7 @@ class VideoPlayerService implements IVideoPlayerService {
         campaignCompleted?: boolean;
         couponId?: string;
         newBalance?: number;
+        currentStepIndex?: number;
       };
     });
 

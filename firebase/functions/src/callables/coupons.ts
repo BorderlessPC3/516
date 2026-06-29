@@ -1,4 +1,4 @@
-import { AuditAction, CouponStatus, FIRESTORE_COLLECTIONS, generateCouponCode } from '@herois/shared';
+import { AuditAction, CouponStatus, FIRESTORE_COLLECTIONS, MAX_PIZZA_COUPONS_PER_PURCHASE, generateCouponCode } from '@herois/shared';
 import { FieldValue } from 'firebase-admin/firestore';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 
@@ -116,4 +116,54 @@ export const createCouponTemplate = onCall(async (request) => {
   });
 
   return { success: true, templateId: ref.id };
+});
+
+export const generatePurchaseCoupons = onCall(async (request) => {
+  const adminUid = await assertAuthenticated(request.auth?.uid);
+  await assertAdmin(db, adminUid);
+
+  const { campaignId, userId, pizzaCount } = request.data as {
+    campaignId: string;
+    userId: string;
+    pizzaCount: number;
+  };
+
+  if (!campaignId || !userId) {
+    throw new HttpsError('invalid-argument', 'campaignId e userId são obrigatórios');
+  }
+  if (pizzaCount < 1 || pizzaCount > MAX_PIZZA_COUPONS_PER_PURCHASE) {
+    throw new HttpsError(
+      'invalid-argument',
+      `Quantidade deve ser entre 1 e ${MAX_PIZZA_COUPONS_PER_PURCHASE}`,
+    );
+  }
+
+  const campaignSnap = await db.collection(FIRESTORE_COLLECTIONS.CAMPAIGNS).doc(campaignId).get();
+  const userSnap = await db.collection(FIRESTORE_COLLECTIONS.USERS).doc(userId).get();
+  if (!campaignSnap.exists || !userSnap.exists) {
+    throw new HttpsError('not-found', 'Campanha ou usuário não encontrado');
+  }
+
+  const campaign = campaignSnap.data()!;
+  const user = userSnap.data()!;
+  const couponIds: string[] = [];
+  const validUntil = campaign.endDate ?? new Date(Date.now() + 30 * 86400000).toISOString();
+
+  for (let i = 0; i < pizzaCount; i++) {
+    const couponId = await generateCouponForUser(db, {
+      userId,
+      campaignId,
+      campaignName: campaign.name as string,
+      userName: user.name as string,
+      userPhone: user.phone as string,
+      validDays: Math.ceil(
+        (new Date(validUntil as string).getTime() - Date.now()) / 86400000,
+      ),
+      rules: `Cupom gerado por compra de pizza (${i + 1}/${pizzaCount}).`,
+      createdBy: adminUid,
+    });
+    couponIds.push(couponId);
+  }
+
+  return { success: true, couponIds, count: couponIds.length };
 });

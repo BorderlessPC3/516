@@ -9,8 +9,11 @@ import { firebaseAuth } from '@/services/firebase/firebase-client';
 import { pushNotificationService } from '@/services/push/push.service';
 import { usePermissionsStore } from '@/store';
 
+import { useAuthStore } from '@/store';
+
 export default function PermissionsScreen() {
   const router = useRouter();
+  const user = useAuthStore((s) => s.user);
   const setPermission = usePermissionsStore((s) => s.setPermission);
   const [, requestCamera] = useCameraPermissions();
   const [step, setStep] = useState(0);
@@ -90,7 +93,11 @@ export default function PermissionsScreen() {
       if (step < steps.length - 1) {
         setStep(step + 1);
       } else {
-        router.replace('/(app)/(tabs)/home');
+        if (user?.scratchCardClaimed) {
+          router.replace('/(app)/(tabs)/home');
+        } else {
+          router.replace('/(app)/scratch-card');
+        }
       }
     } finally {
       setLoading(false);
@@ -100,8 +107,10 @@ export default function PermissionsScreen() {
   const handleSkip = () => {
     if (step < steps.length - 1) {
       setStep(step + 1);
-    } else {
+    } else if (user?.scratchCardClaimed) {
       router.replace('/(app)/(tabs)/home');
+    } else {
+      router.replace('/(app)/scratch-card');
     }
   };
 

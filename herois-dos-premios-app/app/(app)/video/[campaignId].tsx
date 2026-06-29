@@ -3,34 +3,35 @@ import { useQuery } from '@tanstack/react-query';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native';
 
 import { campaignRepository } from '@/data/repositories/campaign.repository';
+import {
+  getCampaignParticipation,
+  getCampaignSponsorSteps,
+  type SponsorStep,
+} from '@/data/repositories/sponsor.repository';
 import { useNetworkStatus } from '@/hooks/use-network';
 import { videoPlayerService } from '@/services/video/video-player.service';
+import { firebaseAuth } from '@/services/firebase/firebase-client';
 
 const PROGRESS_SAVE_INTERVAL_MS = 3000;
-const ABANDON_TIMEOUT_MS = 30000;
 
 export default function VideoPlayerScreen() {
-  const { campaignId } = useLocalSearchParams<{ campaignId: string }>();
+  const { campaignId, startStep } = useLocalSearchParams<{ campaignId: string; startStep?: string }>();
   const router = useRouter();
   const { isOnline } = useNetworkStatus();
   const videoRef = useRef<Video>(null);
   const lastSaveRef = useRef(0);
-  const abandonTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const maxWatchedRef = useRef(0);
 
-  const [videoIndex, setVideoIndex] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [speedIndex] = useState(2);
+  const [stepIndex, setStepIndex] = useState(Number(startStep) || 0);
+  const [speedIndex, setSpeedIndex] = useState(2);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [buffering, setBuffering] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [completedVideos, setCompletedVideos] = useState<Set<string>>(new Set());
-  const [campaignDone, setCampaignDone] = useState(false);
-  const [coinsEarned, setCoinsEarned] = useState(0);
+  const [subtitleText, setSubtitleText] = useState<string | null>(null);
 
   const { data: campaign, isLoading: campaignLoading } = useQuery({
     queryKey: ['campaign', campaignId],
@@ -38,59 +39,59 @@ export default function VideoPlayerScreen() {
     enabled: !!campaignId,
   });
 
-  const { data: videos = [], isLoading: videosLoading } = useQuery({
-    queryKey: ['campaign-videos', campaignId],
-    queryFn: () => videoPlayerService.getCampaignVideos(campaignId!),
+  const { data: steps = [], isLoading: stepsLoading } = useQuery({
+    queryKey: ['sponsor-steps', campaignId],
+    queryFn: () => getCampaignSponsorSteps(campaignId!),
     enabled: !!campaignId,
   });
 
-  const currentVideo = videos[videoIndex];
-  const isLoading = campaignLoading || videosLoading;
+  const uid = firebaseAuth.currentUser?.uid;
+
+  useEffect(() => {
+    if (!uid || !campaignId || startStep) return;
+    getCampaignParticipation(uid, campaignId).then((p) => {
+      if (p?.currentStepIndex != null && p.currentStepIndex > 0) {
+        setStepIndex(p.currentStepIndex);
+      }
+    });
+  }, [uid, campaignId, startStep]);
+
+  const currentStep: SponsorStep | undefined = steps[stepIndex];
+  const videoId = currentStep?.videoId ?? currentStep?.sponsorId ?? `step-${stepIndex}`;
+  const videoUrl = currentStep?.videoUrl || campaign?.videoUrl;
+  const isLoading = campaignLoading || stepsLoading;
 
   const loadProgress = useCallback(async () => {
-    if (!campaignId || !currentVideo) return;
-    const p = await videoPlayerService.getProgress(campaignId, currentVideo.id);
-    if (p?.isCompleted) {
-      setCompletedVideos((prev) => new Set([...prev, currentVideo.id]));
-    }
+    if (!campaignId || !videoId) return;
+    const p = await videoPlayerService.getProgress(campaignId, videoId);
     if (p && !p.isCompleted) {
       maxWatchedRef.current = p.currentTime;
       await videoRef.current?.setPositionAsync(p.currentTime * 1000);
     }
-  }, [campaignId, currentVideo]);
+  }, [campaignId, videoId]);
 
   useEffect(() => {
     loadProgress();
-    videoPlayerService.trackAnalytics('VIDEO_STARTED', { campaignId, videoId: currentVideo?.id });
-  }, [loadProgress, campaignId, currentVideo?.id]);
+    maxWatchedRef.current = 0;
+    videoPlayerService.trackAnalytics('VIDEO_STARTED', {
+      campaignId,
+      videoId,
+      sponsorId: currentStep?.sponsorId,
+    });
+  }, [loadProgress, campaignId, videoId, currentStep?.sponsorId]);
 
   useEffect(() => {
-    if (currentVideo && videoRef.current) {
+    if (videoUrl && videoRef.current) {
       videoRef.current.playAsync().catch(() => setError('Erro ao iniciar reprodução'));
     }
-  }, [currentVideo]);
-
-  const resetAbandonTimer = () => {
-    if (abandonTimerRef.current) clearTimeout(abandonTimerRef.current);
-    abandonTimerRef.current = setTimeout(() => {
-      videoPlayerService.trackAnalytics('VIDEO_ABANDONED', {
-        campaignId,
-        videoId: currentVideo?.id,
-        progress,
-        duration,
-      });
-    }, ABANDON_TIMEOUT_MS);
-  };
+  }, [videoUrl, stepIndex]);
 
   const handlePlaybackStatusUpdate = async (status: AVPlaybackStatus) => {
-    if (!status.isLoaded || !currentVideo || !campaignId) return;
+    if (!status.isLoaded || !campaignId || !videoId) return;
 
-    setIsPlaying(status.isPlaying);
     setBuffering(status.isBuffering);
     setProgress(status.positionMillis / 1000);
     setDuration(status.durationMillis ? status.durationMillis / 1000 : 0);
-
-    if (status.isPlaying) resetAbandonTimer();
 
     const currentTime = status.positionMillis / 1000;
     const dur = status.durationMillis ? status.durationMillis / 1000 : 0;
@@ -99,46 +100,47 @@ export default function VideoPlayerScreen() {
       await videoRef.current?.setPositionAsync(maxWatchedRef.current * 1000);
       return;
     }
-
-    if (currentTime > maxWatchedRef.current) {
-      maxWatchedRef.current = currentTime;
-    }
+    if (currentTime > maxWatchedRef.current) maxWatchedRef.current = currentTime;
 
     const now = Date.now();
     if (now - lastSaveRef.current > PROGRESS_SAVE_INTERVAL_MS) {
       lastSaveRef.current = now;
-      await videoPlayerService.saveProgress(campaignId, currentVideo.id, currentTime, dur);
+      await videoPlayerService.saveProgress(campaignId, videoId, currentTime, dur);
     }
 
     const watchedPercent = dur > 0 ? currentTime / dur : 0;
 
-    if (watchedPercent >= VIDEO_COMPLETION_THRESHOLD && !completedVideos.has(currentVideo.id)) {
-      const newCompleted = new Set([...completedVideos, currentVideo.id]);
-      setCompletedVideos(newCompleted);
-
-      if (isOnline) {
-        const result = await videoPlayerService.markCompleted(
-          campaignId,
-          currentVideo.id,
-          currentTime,
-          watchedPercent,
-        );
-
-        if (result.campaignCompleted) {
-          setCampaignDone(true);
-          setCoinsEarned(result.coinsEarned ?? 0);
-          videoPlayerService.trackAnalytics('CAMPAIGN_COMPLETED', { campaignId });
-          router.replace(`/(app)/social/${campaignId}?completed=true&couponId=${result.couponId ?? ''}`);
-          return;
-        }
-      }
-
-      if (videoIndex < videos.length - 1) {
-        setVideoIndex(videoIndex + 1);
-        maxWatchedRef.current = 0;
-        videoPlayerService.trackAnalytics('VIDEO_COMPLETED', { campaignId, videoId: currentVideo.id });
-      }
+    if (watchedPercent >= VIDEO_COMPLETION_THRESHOLD && status.isPlaying === false && dur > 0 && currentTime >= dur * VIDEO_COMPLETION_THRESHOLD) {
+      // handled on didJustFinish below
     }
+  };
+
+  const handleVideoComplete = async () => {
+    if (!campaignId || !videoId || !isOnline) return;
+
+    const dur = duration || 1;
+    const result = await videoPlayerService.markCompleted(
+      campaignId,
+      videoId,
+      dur,
+      1,
+      currentStep?.sponsorId,
+    );
+
+    if (result.campaignCompleted) {
+      router.replace(`/(app)/social/${campaignId}?completed=true&couponId=${result.couponId ?? ''}`);
+      return;
+    }
+
+    router.replace({
+      pathname: '/(app)/sponsor-step/[campaignId]',
+      params: {
+        campaignId,
+        sponsorId: currentStep?.sponsorId ?? '',
+        stepIndex: String(stepIndex),
+        totalSteps: String(steps.length || 1),
+      },
+    });
   };
 
   if (isLoading) {
@@ -150,21 +152,17 @@ export default function VideoPlayerScreen() {
     );
   }
 
-  if (!videos.length) {
-    const fallbackUrl = campaign?.videoUrl;
-    if (!fallbackUrl) {
-      return (
-        <View className="flex-1 bg-black items-center justify-center px-6">
-          <Text className="text-white text-center">Nenhum vídeo disponível para esta campanha</Text>
-          <TouchableOpacity className="mt-6 bg-primary px-6 py-3 rounded-lg" onPress={() => router.back()}>
-            <Text className="text-white font-bold">Voltar</Text>
-          </TouchableOpacity>
-        </View>
-      );
-    }
+  if (!videoUrl) {
+    return (
+      <View className="flex-1 bg-black items-center justify-center px-6">
+        <Text className="text-white text-center">Nenhum vídeo disponível para esta etapa</Text>
+        <TouchableOpacity className="mt-6 bg-primary px-6 py-3 rounded-lg" onPress={() => router.back()}>
+          <Text className="text-white font-bold">Voltar</Text>
+        </TouchableOpacity>
+      </View>
+    );
   }
 
-  const videoUrl = currentVideo?.url || campaign?.videoUrl;
   const watchedPercent = duration > 0 ? Math.round((progress / duration) * 100) : 0;
 
   return (
@@ -172,14 +170,11 @@ export default function VideoPlayerScreen() {
       {error ? (
         <View className="flex-1 items-center justify-center px-6">
           <Text className="text-red-400 text-center mb-4">{error}</Text>
-          <TouchableOpacity
-            className="bg-primary px-6 py-3 rounded-lg"
-            onPress={() => { setError(null); videoRef.current?.playAsync(); }}
-          >
+          <TouchableOpacity className="bg-primary px-6 py-3 rounded-lg" onPress={() => { setError(null); videoRef.current?.playAsync(); }}>
             <Text className="text-white font-bold">Tentar novamente</Text>
           </TouchableOpacity>
         </View>
-      ) : videoUrl ? (
+      ) : (
         <Video
           ref={videoRef}
           source={{ uri: videoUrl }}
@@ -188,10 +183,21 @@ export default function VideoPlayerScreen() {
           useNativeControls={false}
           shouldPlay
           rate={VIDEO_PLAYBACK_SPEEDS[speedIndex]}
-          onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
+          onPlaybackStatusUpdate={(status) => {
+            handlePlaybackStatusUpdate(status);
+            if (status.isLoaded && status.didJustFinish) {
+              handleVideoComplete();
+            }
+          }}
           onError={() => setError('Erro ao carregar o vídeo. Verifique sua conexão.')}
         />
-      ) : null}
+      )}
+
+      {subtitleText && (
+        <View className="absolute bottom-32 left-4 right-4 bg-black/70 p-2 rounded">
+          <Text className="text-white text-center">{subtitleText}</Text>
+        </View>
+      )}
 
       {buffering && (
         <View className="absolute top-1/2 left-0 right-0 items-center">
@@ -200,34 +206,32 @@ export default function VideoPlayerScreen() {
       )}
 
       <View className="absolute bottom-0 left-0 right-0 bg-black/80 p-4">
-        <Text className="text-white font-bold mb-1">{campaign?.name}</Text>
-        {videos.length > 1 && (
+        <Text className="text-white font-bold mb-1">{currentStep?.sponsorName ?? campaign?.name}</Text>
+        {steps.length > 1 && (
           <Text className="text-gray-400 text-sm mb-2">
-            Vídeo {videoIndex + 1} de {videos.length}: {currentVideo?.title}
+            Etapa {stepIndex + 1} de {steps.length}
           </Text>
         )}
         <View className="h-1 bg-gray-700 rounded-full mb-2">
-          <View
-            className="h-1 bg-primary rounded-full"
-            style={{ width: `${watchedPercent}%` }}
-          />
+          <View className="h-1 bg-primary rounded-full" style={{ width: `${watchedPercent}%` }} />
         </View>
         <Text className="text-gray-400 text-xs mb-3">
           {watchedPercent}% assistido • {Math.floor(progress)}s / {Math.floor(duration)}s
         </Text>
-        <View className="flex-row justify-between items-center">
-          <Text className="text-gray-500 text-sm">Não é possível pular o vídeo</Text>
-          {!campaignDone && (
-            <TouchableOpacity onPress={() => router.back()} className="px-4 py-2">
-              <Text className="text-white">Sair</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-2">
+          {VIDEO_PLAYBACK_SPEEDS.map((speed, i) => (
+            <TouchableOpacity
+              key={speed}
+              className={`mr-2 px-3 py-1 rounded ${speedIndex === i ? 'bg-primary' : 'bg-gray-700'}`}
+              onPress={() => setSpeedIndex(i)}
+            >
+              <Text className="text-white text-xs">{speed}x</Text>
             </TouchableOpacity>
-          )}
-        </View>
-        {campaignDone && (
-          <Text className="text-green-400 text-center mt-3">
-            ✓ Campanha concluída! +{coinsEarned} moedas
-          </Text>
-        )}
+          ))}
+        </ScrollView>
+        <TouchableOpacity onPress={() => router.back()} className="px-4 py-2 self-end">
+          <Text className="text-white">Sair</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );

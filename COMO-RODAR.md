@@ -26,6 +26,8 @@ http://localhost:3000
 
 Instale o **Expo Go** na Play Store / App Store (SDK 54). Celular e PC devem estar na mesma rede Wi‑Fi.
 
+**Não rode `npx expo start` na raiz do monorepo** (`516\`) — use um dos comandos abaixo.
+
 ```
 c:\borderless\projetos\516
 npm run dev:app

@@ -163,6 +163,7 @@ class FirebaseAuthService implements IAuthService {
       drawIds: [],
       referralCode,
       referredBy: data.referredBy,
+      scratchCardClaimed: false,
       permissionsGranted: {
         camera: false,
         location: false,
