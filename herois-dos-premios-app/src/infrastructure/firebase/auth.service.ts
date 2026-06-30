@@ -135,10 +135,8 @@ class FirebaseAuthService implements IAuthService {
     data: {
       name: string;
       phone: string;
+      email: string;
       birthDate: string;
-      cityId: string;
-      cityName: string;
-      state: string;
       deviceId?: string;
       referredBy?: string;
     },
@@ -149,10 +147,8 @@ class FirebaseAuthService implements IAuthService {
     const userData = {
       name: data.name,
       phone: normalizePhone(data.phone),
+      email: data.email.trim().toLowerCase(),
       birthDate: data.birthDate,
-      cityId: data.cityId,
-      cityName: data.cityName,
-      state: data.state,
       deviceId,
       fcmTokens: [],
       coinBalance: 0,

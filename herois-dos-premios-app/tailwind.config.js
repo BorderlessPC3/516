@@ -15,7 +15,16 @@ module.exports = {
           light: '#16213e',
         },
         accent: '#0f3460',
-        gold: '#ffd700',
+        gold: {
+          DEFAULT: '#D4AF37',
+          light: '#F9E076',
+          dark: '#B8860B',
+        },
+        burgundy: {
+          DEFAULT: '#8B1024',
+          dark: '#4A0610',
+          input: '#120202',
+        },
       },
     },
   },

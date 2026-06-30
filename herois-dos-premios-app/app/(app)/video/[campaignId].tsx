@@ -3,7 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator, ScrollView, TextInput, Alert } from 'react-native';
+import { httpsCallable } from 'firebase/functions';
 
 import { campaignRepository } from '@/data/repositories/campaign.repository';
 import {
@@ -13,7 +14,8 @@ import {
 } from '@/data/repositories/sponsor.repository';
 import { useNetworkStatus } from '@/hooks/use-network';
 import { videoPlayerService } from '@/services/video/video-player.service';
-import { firebaseAuth } from '@/services/firebase/firebase-client';
+import { firebaseAuth, firebaseFunctions } from '@/services/firebase/firebase-client';
+import { useAuthStore } from '@/store';
 
 const PROGRESS_SAVE_INTERVAL_MS = 3000;
 
@@ -32,6 +34,10 @@ export default function VideoPlayerScreen() {
   const [buffering, setBuffering] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [subtitleText, setSubtitleText] = useState<string | null>(null);
+  const [couponCode, setCouponCode] = useState('');
+  const [claimingCoupon, setClaimingCoupon] = useState(false);
+  const [couponClaimed, setCouponClaimed] = useState(false);
+  const user = useAuthStore((s) => s.user);
 
   const { data: campaign, isLoading: campaignLoading } = useQuery({
     queryKey: ['campaign', campaignId],
@@ -112,6 +118,38 @@ export default function VideoPlayerScreen() {
 
     if (watchedPercent >= VIDEO_COMPLETION_THRESHOLD && status.isPlaying === false && dur > 0 && currentTime >= dur * VIDEO_COMPLETION_THRESHOLD) {
       // handled on didJustFinish below
+    }
+  };
+
+  const handleClaimCoupon = async () => {
+    if (!campaignId || !couponCode.trim()) {
+      Alert.alert('Atenção', 'Digite o código do cupom');
+      return;
+    }
+    if (!user?.phone) {
+      Alert.alert('Cadastro incompleto', 'Atualize seu WhatsApp no perfil para resgatar o cupom.');
+      return;
+    }
+
+    setClaimingCoupon(true);
+    try {
+      const redeem = httpsCallable(firebaseFunctions, 'redeemCouponCode');
+      const res = await redeem({
+        code: couponCode.trim(),
+        campaignId,
+        phone: user.phone,
+      });
+      const data = res.data as { message: string };
+      setCouponClaimed(true);
+      Alert.alert('Sucesso', data.message);
+    } catch (err: unknown) {
+      const message =
+        err && typeof err === 'object' && 'message' in err
+          ? String((err as { message: string }).message)
+          : 'Não foi possível resgatar o cupom';
+      Alert.alert('Erro', message);
+    } finally {
+      setClaimingCoupon(false);
     }
   };
 
@@ -229,6 +267,34 @@ export default function VideoPlayerScreen() {
             </TouchableOpacity>
           ))}
         </ScrollView>
+
+        <View className="border-t border-gray-700 pt-3 mt-1 mb-2">
+          <Text className="text-white text-sm font-semibold mb-2">Código do cupom</Text>
+          <View className="flex-row gap-2">
+            <TextInput
+              className="flex-1 bg-gray-800 text-white px-3 py-2 rounded-lg font-mono"
+              placeholder="HPXXXXXXXX"
+              placeholderTextColor="#6b7280"
+              value={couponCode}
+              onChangeText={(t) => setCouponCode(t.toUpperCase())}
+              editable={!couponClaimed}
+              autoCapitalize="characters"
+            />
+            <TouchableOpacity
+              className={`px-4 py-2 rounded-lg justify-center ${couponClaimed ? 'bg-gray-600' : 'bg-gold'}`}
+              onPress={handleClaimCoupon}
+              disabled={claimingCoupon || couponClaimed}
+            >
+              <Text className={`font-bold ${couponClaimed ? 'text-gray-400' : 'text-black'}`}>
+                {claimingCoupon ? '...' : couponClaimed ? 'OK' : 'Resgatar'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <Text className="text-gray-500 text-xs mt-1">
+            Informe o código recebido na pizzaria para concorrer
+          </Text>
+        </View>
+
         <TouchableOpacity onPress={() => router.back()} className="px-4 py-2 self-end">
           <Text className="text-white">Sair</Text>
         </TouchableOpacity>

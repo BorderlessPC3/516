@@ -1,4 +1,4 @@
-import { ScannerType, withRetry } from '@herois/shared';
+import { ScannerType, parseUniversalLinkCampaignId, withRetry } from '@herois/shared';
 import type { ScanResult } from '@herois/shared';
 import type { IScannerService } from '@herois/shared';
 import { parseQrCampaignId } from '@herois/shared';
@@ -64,9 +64,14 @@ class ScannerService implements IScannerService {
   }
 
   async handleDeepLink(url: string): Promise<ScanResult | null> {
+    const campaignId = parseUniversalLinkCampaignId(url);
+    if (campaignId) {
+      return this.validateAndRegisterScan(url, {});
+    }
+
     const parsed = Linking.parse(url);
-    const campaignId = parsed.queryParams?.campaignId as string | undefined;
-    if (!campaignId) return null;
+    const queryCampaignId = parsed.queryParams?.campaignId as string | undefined;
+    if (!queryCampaignId) return null;
 
     return this.validateAndRegisterScan(url, {});
   }

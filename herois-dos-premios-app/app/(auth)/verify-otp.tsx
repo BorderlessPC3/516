@@ -1,12 +1,10 @@
-import { FIRESTORE_COLLECTIONS, withRetry } from '@herois/shared';
+import { withRetry } from '@herois/shared';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { doc, getDoc } from 'firebase/firestore';
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, Alert } from 'react-native';
 
 import { useNetworkStatus } from '@/hooks/use-network';
 import { authService } from '@/services/firebase/auth.service';
-import { firestore } from '@/services/firebase/firebase-client';
 
 export default function VerifyOtpScreen() {
   const router = useRouter();
@@ -15,8 +13,8 @@ export default function VerifyOtpScreen() {
     phone: string;
     register?: string;
     name?: string;
+    email?: string;
     birthDate?: string;
-    cityId?: string;
     referredBy?: string;
   }>();
   const [code, setCode] = useState('');
@@ -37,16 +35,12 @@ export default function VerifyOtpScreen() {
     try {
       const { uid } = await withRetry(() => authService.verifyOtp(params.phone!, code), 3);
 
-      if (params.register === 'true' && params.name && params.cityId) {
-        const citySnap = await getDoc(doc(firestore, FIRESTORE_COLLECTIONS.CITIES, params.cityId));
-        const city = citySnap.data();
+      if (params.register === 'true' && params.name && params.email) {
         await authService.createUserProfile(uid, {
           name: params.name,
           phone: params.phone!,
+          email: params.email,
           birthDate: params.birthDate || '',
-          cityId: params.cityId,
-          cityName: city?.name || '',
-          state: city?.state || '',
           referredBy: params.referredBy,
         });
         router.replace('/(auth)/permissions');

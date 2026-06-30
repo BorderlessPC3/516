@@ -3,6 +3,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { View, Text, ActivityIndicator } from 'react-native';
 
+import { HeroTrophyLogo } from '@/presentation/components/brand/HeroTrophyLogo';
 import { useDeepLinks } from '@/hooks/use-deep-links';
 import { useAuthStore } from '@/store';
 
@@ -31,10 +32,15 @@ export default function SplashScreenPage() {
   }, [isLoading, isAuthenticated, router]);
 
   return (
-    <View className="flex-1 items-center justify-center bg-secondary">
-      <Text className="text-4xl font-bold text-primary mb-2">🏆</Text>
-      <Text className="text-2xl font-bold text-white">Heróis dos Prêmios</Text>
-      <ActivityIndicator size="large" color="#e94560" className="mt-8" />
+    <View className="flex-1 items-center justify-center" style={{ backgroundColor: '#2A0505' }}>
+      <HeroTrophyLogo size={120} style={{ marginBottom: 16 }} />
+      <Text
+        className="text-white font-extrabold"
+        style={{ fontSize: 22, letterSpacing: 1 }}
+      >
+        Heróis dos Prêmios
+      </Text>
+      <ActivityIndicator size="large" color="#D4AF37" className="mt-8" />
     </View>
   );
 }

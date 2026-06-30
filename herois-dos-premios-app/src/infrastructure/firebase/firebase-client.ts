@@ -5,7 +5,7 @@ import { getFirestore } from 'firebase/firestore';
 import { getFunctions } from 'firebase/functions';
 import { getStorage } from 'firebase/storage';
 
-import { env } from './env';
+import { env } from '@/core/config/env';
 
 const firebaseConfig = env.firebase;
 
