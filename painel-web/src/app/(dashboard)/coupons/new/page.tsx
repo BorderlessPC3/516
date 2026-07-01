@@ -27,6 +27,9 @@ export default function NewCouponPage() {
   const [pizzaUserId, setPizzaUserId] = useState('');
   const [pizzaCount, setPizzaCount] = useState(1);
   const [pizzaResult, setPizzaResult] = useState('');
+  const [bulkCampaignId, setBulkCampaignId] = useState('');
+  const [bulkQuantity, setBulkQuantity] = useState(10);
+  const [bulkResult, setBulkResult] = useState('');
   const { register, handleSubmit, formState: { errors } } = useForm<CouponTemplateInput>({
     resolver: zodResolver(couponTemplateSchema),
     defaultValues: { quantity: 1, isActive: true, rules: 'Válido conforme regulamento da campanha.' },
@@ -50,6 +53,17 @@ export default function NewCouponPage() {
     },
     onSuccess: (data) => {
       setPizzaResult(`${data.count} cupom(ns) gerado(s): ${data.couponIds.join(', ')}`);
+    },
+  });
+
+  const bulkMutation = useMutation({
+    mutationFn: async () => {
+      const fn = httpsCallable(functions, 'generateBulkCoupons');
+      const res = await fn({ campaignId: bulkCampaignId, quantity: bulkQuantity });
+      return res.data as { codes: string[]; count: number };
+    },
+    onSuccess: (data) => {
+      setBulkResult(`${data.count} código(s) gerado(s):\n${data.codes.join('\n')}`);
     },
   });
 
@@ -169,6 +183,51 @@ export default function NewCouponPage() {
             {pizzaMutation.isPending ? 'Gerando...' : 'Gerar Cupons'}
           </Button>
           {pizzaResult && <p className="text-sm text-green-500">{pizzaResult}</p>}
+        </CardContent>
+      </Card>
+
+      <Card className="mt-8">
+        <CardHeader><CardTitle>Cupons para impressão (pizzaria)</CardTitle></CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Gera códigos sem usuário vinculado. O cliente resgata após assistir o vídeo da campanha
+            (navegador ou app), informando o código e o WhatsApp.
+          </p>
+          <div>
+            <label className="text-sm font-medium">Campanha</label>
+            <select
+              value={bulkCampaignId}
+              onChange={(e) => setBulkCampaignId(e.target.value)}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3"
+            >
+              <option value="">Selecione</option>
+              {campaigns.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-sm font-medium">Quantidade (máx. 500)</label>
+            <Input
+              type="number"
+              min={1}
+              max={500}
+              value={bulkQuantity}
+              onChange={(e) => setBulkQuantity(Number(e.target.value))}
+            />
+          </div>
+          <Button
+            type="button"
+            onClick={() => bulkMutation.mutate()}
+            disabled={!bulkCampaignId || bulkMutation.isPending}
+          >
+            {bulkMutation.isPending ? 'Gerando...' : 'Gerar códigos para impressão'}
+          </Button>
+          {bulkResult && (
+            <pre className="text-sm text-green-500 whitespace-pre-wrap bg-muted p-3 rounded-md">
+              {bulkResult}
+            </pre>
+          )}
         </CardContent>
       </Card>
     </div>

@@ -24,7 +24,7 @@ export default function UsersPage() {
               <tr>
                 <th className="text-left p-4 text-sm font-medium">Nome</th>
                 <th className="text-left p-4 text-sm font-medium">WhatsApp</th>
-                <th className="text-left p-4 text-sm font-medium">Cidade</th>
+                <th className="text-left p-4 text-sm font-medium">E-mail</th>
                 <th className="text-left p-4 text-sm font-medium">Moedas</th>
                 <th className="text-left p-4 text-sm font-medium">Cadastro</th>
               </tr>
@@ -34,9 +34,7 @@ export default function UsersPage() {
                 <tr key={user.id} className="border-t border-border">
                   <td className="p-4">{user.name}</td>
                   <td className="p-4">{formatPhone(user.phone)}</td>
-                  <td className="p-4">
-                    {user.cityName} - {user.state}
-                  </td>
+                  <td className="p-4">{user.email || '—'}</td>
                   <td className="p-4">{user.coinBalance}</td>
                   <td className="p-4 text-sm text-muted-foreground">
                     {formatDate(toDate(user.createdAt))}

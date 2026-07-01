@@ -24,6 +24,8 @@ const settingsFormSchema = z.object({
   supportEmail: z.string().email('E-mail inválido').or(z.literal('')),
   supportPhone: z.string().optional(),
   deepLinkDomain: z.string().min(3, 'Domínio inválido'),
+  playStoreUrl: z.string().url('URL inválida'),
+  appStoreUrl: z.string().url('URL inválida'),
   maintenanceMode: z.boolean(),
   coinRewardAmount: z.coerce.number().int().min(0),
   coinRequiredForReward: z.coerce.number().int().min(1),
@@ -178,11 +180,27 @@ export default function SettingsPage() {
               </div>
             </div>
             <div>
-              <label className="text-sm font-medium">Domínio (deep link)</label>
+              <label className="text-sm font-medium">Domínio (deep link / QR web)</label>
               <Input {...register('deepLinkDomain')} />
               {errors.deepLinkDomain && (
                 <p className="text-destructive text-sm mt-1">{errors.deepLinkDomain.message}</p>
               )}
+            </div>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium">Google Play (URL da loja)</label>
+                <Input {...register('playStoreUrl')} placeholder="https://play.google.com/..." />
+                {errors.playStoreUrl && (
+                  <p className="text-destructive text-sm mt-1">{errors.playStoreUrl.message}</p>
+                )}
+              </div>
+              <div>
+                <label className="text-sm font-medium">App Store (URL da loja)</label>
+                <Input {...register('appStoreUrl')} placeholder="https://apps.apple.com/..." />
+                {errors.appStoreUrl && (
+                  <p className="text-destructive text-sm mt-1">{errors.appStoreUrl.message}</p>
+                )}
+              </div>
             </div>
             <label className="flex items-center gap-3 cursor-pointer">
               <input type="checkbox" {...register('maintenanceMode')} className="h-4 w-4" />

@@ -1,5 +1,7 @@
 import {
   APP_UNIVERSAL_LINK_DOMAIN,
+  DEFAULT_APP_STORE_URL,
+  DEFAULT_PLAY_STORE_URL,
   FIRESTORE_COLLECTIONS,
   SETTINGS_KEYS,
   VIDEO_COMPLETION_THRESHOLD,
@@ -17,6 +19,8 @@ export interface AppSettingsForm {
   supportEmail: string;
   supportPhone: string;
   deepLinkDomain: string;
+  playStoreUrl: string;
+  appStoreUrl: string;
   maintenanceMode: boolean;
   coinRewardAmount: number;
   coinRequiredForReward: number;
@@ -29,6 +33,8 @@ export const DEFAULT_APP_SETTINGS: AppSettingsForm = {
   supportEmail: '',
   supportPhone: '',
   deepLinkDomain: APP_UNIVERSAL_LINK_DOMAIN,
+  playStoreUrl: DEFAULT_PLAY_STORE_URL,
+  appStoreUrl: DEFAULT_APP_STORE_URL,
   maintenanceMode: false,
   coinRewardAmount: 1,
   coinRequiredForReward: 10,
@@ -69,6 +75,8 @@ async function readFirestoreSettings(): Promise<Partial<AppSettingsForm>> {
     'supportEmail',
     'supportPhone',
     'deepLinkDomain',
+    SETTINGS_KEYS.PLAY_STORE_URL,
+    SETTINGS_KEYS.APP_STORE_URL,
   ];
 
   const partial: Partial<AppSettingsForm> = {};
@@ -106,6 +114,12 @@ async function readFirestoreSettings(): Promise<Partial<AppSettingsForm>> {
         break;
       case 'deepLinkDomain':
         partial.deepLinkDomain = String(value);
+        break;
+      case SETTINGS_KEYS.PLAY_STORE_URL:
+        partial.playStoreUrl = String(value);
+        break;
+      case SETTINGS_KEYS.APP_STORE_URL:
+        partial.appStoreUrl = String(value);
         break;
       default:
         break;
@@ -159,6 +173,8 @@ export async function saveAppSettings(
         ['supportEmail', settings.supportEmail],
         ['supportPhone', settings.supportPhone],
         ['deepLinkDomain', settings.deepLinkDomain],
+        [SETTINGS_KEYS.PLAY_STORE_URL, settings.playStoreUrl],
+        [SETTINGS_KEYS.APP_STORE_URL, settings.appStoreUrl],
       ];
 
       await Promise.all(

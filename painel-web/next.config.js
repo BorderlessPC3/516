@@ -5,6 +5,7 @@ const nextConfig = {
     remotePatterns: [
       { protocol: 'https', hostname: '**.cloudfront.net' },
       { protocol: 'https', hostname: 'firebasestorage.googleapis.com' },
+      { protocol: 'https', hostname: 'quickchart.io' },
     ],
   },
 };

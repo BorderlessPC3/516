@@ -9,7 +9,6 @@ import {
   FIRESTORE_COLLECTIONS,
   SocialNetwork,
   type Campaign,
-  type Sponsor,
 } from '@herois/shared';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery } from '@tanstack/react-query';
@@ -20,15 +19,20 @@ import { useForm } from 'react-hook-form';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { CampaignQrCard } from '@/components/campaigns/campaign-qr-card';
+import { CampaignVideoSection } from '@/components/campaigns/campaign-video-section';
 import { getDocument, updateDocument, listDocuments } from '@/services/firebase/firestore.service';
+import { syncCampaignQrCode } from '@/services/campaigns/campaign-qr.service';
 import { getCampaignSponsorIds, syncCampaignSponsors } from '@/services/campaign-sponsors.service';
+import { loadAppSettings } from '@/services/settings/settings.service';
 
 export default function EditCampaignPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const [selectedSponsors, setSelectedSponsors] = useState<string[]>([]);
+  const [qrUrl, setQrUrl] = useState('');
 
-  const { data: campaign } = useQuery({
+  const { data: campaign, refetch: refetchCampaign } = useQuery({
     queryKey: ['campaign', params.id],
     queryFn: () => getDocument<Campaign>(FIRESTORE_COLLECTIONS.CAMPAIGNS, params.id),
     enabled: !!params.id,
@@ -64,6 +68,10 @@ export default function EditCampaignPage() {
   useEffect(() => {
     if (params.id) {
       getCampaignSponsorIds(params.id).then(setSelectedSponsors);
+      loadAppSettings().then(async ({ settings }) => {
+        const url = await syncCampaignQrCode(params.id, settings.deepLinkDomain);
+        setQrUrl(url);
+      });
     }
   }, [params.id]);
 
@@ -74,6 +82,9 @@ export default function EditCampaignPage() {
         sponsorIds: selectedSponsors,
       });
       await syncCampaignSponsors(params.id, selectedSponsors, sponsors);
+      const { settings } = await loadAppSettings();
+      const url = await syncCampaignQrCode(params.id, settings.deepLinkDomain);
+      setQrUrl(url);
     },
     onSuccess: () => router.push('/campaigns'),
   });
@@ -153,6 +164,14 @@ export default function EditCampaignPage() {
           </form>
         </CardContent>
       </Card>
+
+      <CampaignVideoSection
+        campaignId={params.id}
+        campaign={campaign}
+        onLinked={() => refetchCampaign()}
+      />
+
+      {qrUrl ? <CampaignQrCard campaignId={params.id} qrUrl={qrUrl} /> : null}
     </div>
   );
 }
